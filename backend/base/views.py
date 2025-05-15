@@ -50,13 +50,13 @@ class PartNumberViewSet(viewsets.ModelViewSet):
     queryset = PartNumber.objects.all()
     #serializer_class = RequestSerializer
     serializer_class = PartNumberSerializer
-    permission_classes = [IsAdmin]  # Solo admin puede gestionar partes
+    permission_classes = [IsAdmin] 
     
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             permission_classes = [IsAdmin]
         else:
-            permission_classes = [IsAuthenticated]  # Todos autenticados pueden listar/ver
+            permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
 
 class ShipmentCreateView(generics.CreateAPIView):
@@ -115,7 +115,6 @@ class RequestViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Puedes añadir filtros personalizados aquí si es necesario
         return queryset
     
     

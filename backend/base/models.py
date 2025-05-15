@@ -107,30 +107,8 @@ class Shipment(models.Model):
 
     comment = models.TextField(blank=True, null=True)
 
-    # def save(self, *args, **kwargs):
-    #     if not self.shipment_code:
-    #         with transaction.atomic():
-    #             super().save(*args, **kwargs)
-
-    #             today = now().date()
-    #             week_number = today.isocalendar()[1]
-    #             day = today.day
-    #             year = today.year % 100
-
-    #             shipment_code = f"SH{week_number:02d}{day:02d}{year:02d}00{self.id}"
-
-    #             # Verifica que no esté usado (muy improbable, pero seguro)
-    #             if Shipment.objects.filter(shipment_code=shipment_code).exists():
-    #                 raise IntegrityError(f"Shipment code '{shipment_code}' already exists.")
-                
-    #             self.shipment_code = shipment_code
-    #             super().save(update_fields=['shipment_code'])
-    #     else:
-    #         super().save(*args, **kwargs)
-
     def save(self, *args, **kwargs):
 
-        # Obtener el usuario actual de los kwargs o del contexto
         current_user = kwargs.pop('current_user', None)
 
         if not self.shipment_code:
@@ -150,7 +128,7 @@ class Shipment(models.Model):
                 self.shipment_code = shipment_code
                 super().save(update_fields=['shipment_code'])
         else:
-            if self.pk:  # Solo si ya existe el objeto
+            if self.pk:
                 old_instance = Shipment.objects.get(pk=self.pk)
                 old_status = old_instance.status
 

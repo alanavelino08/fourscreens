@@ -86,7 +86,7 @@ class ShipmentAdmin(admin.ModelAdmin):
         return obj.cancelled_at.strftime("%Y-%m-%d %H:%M") if obj.cancelled_at else "-"
     cancelled_time.short_description = 'Cancelado'
 
-# Registra los demás modelos sin personalización
+
 admin.site.register(User)
 admin.site.register(Request)
 admin.site.register(PartNumber)

@@ -1,143 +1,3 @@
-// import { useState } from 'react';
-// import { Button, TextField, Box, Typography, Container,
-//   Grid, Paper, Divider, Snackbar, Alert, MenuItem } from '@mui/material';
-// import api from '../../services/api';
-
-// const CreateUser = () => {
-//   const [formData, setFormData] = useState({
-//     username: '',
-//     email: '',
-//     password: '',
-//     first_name: '',
-//     last_name: '',
-//     employee_number: '',
-//     role: ''
-//   });
-
-//   // //pagination
-//   // const [pagination, setPagination] = useState({
-//   //     count: 0,
-//   //     currentPage: 1,
-//   //     totalPages: 1
-//   //   });
-  
-//   // const [users, setUsers] = useState([]);
-//   // const [loading, setLoading] = useState(false);
-
-//   const handleChange = (e) => {
-//     setFormData({ ...formData, [e.target.name]: e.target.value });
-//   };
-
-//   const handleSubmit = async (e) => {
-//     e.preventDefault();
-//     try {
-//       await api.post('/users/', formData);
-//       alert('Usuario creado exitosamente');
-//       setFormData({
-//         username: '',
-//         email: '',
-//         password: '',
-//         first_name: '',
-//         last_name: '',
-//         employee_number: '',
-//         role: ''
-//       });
-//     } catch (error) {
-//       alert('Error:', error.response.data.detail || 'Error al crear usuario');
-//       console.error('Error creating user:', error);
-//     }
-//   };
-
-//   //Show all user registered
-//   // const showAllUsers = async (page = 1) => {
-//   //   try {
-//   //     setLoading(true);
-//   //     const endpoint = "/users/";
-//   //     const response = await api.get(`${endpoint}?page=${page}`);
-//   //     setUsers(response.data.results);
-//   //     setPagination({
-//   //       count: response.data.count,
-//   //       currentPage: page,
-//   //       totalPages: Math.ceil(response.data.count / 20)
-//   //     })
-//   //   } catch (error) {
-//   //     console.log('Error to load users');
-//   //   } finally {
-//   //     setLoading(false);
-//   //   }
-//   // }
-
-//   // useEffect(() => {
-//   //   showAllUsers();
-//   //   }, [tabValue]);
-
-//   // const handlePageChange = (event, page) => {
-//   //   showAllUsers(page);
-//   // };
-
-//   return (
-//     <Container maxWidth="md">
-//       <Box component="form" onSubmit={handleSubmit}>
-//         <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-//           <Typography variant="h6" gutterBottom>Crear usuario</Typography>
-//           <Grid container spacing={2}>
-//             <Grid item size={4}>
-//               <TextField fullWidth label="Usuario" name="username" value={formData.username} onChange={handleChange} required/>
-//             </Grid>
-
-//             <Grid item size={8}>
-//               <TextField fullWidth label="Email" name="email" value={formData.email} onChange={handleChange} required/>
-//             </Grid>
-
-//             <Grid item size={12}>
-//               <TextField fullWidth label="Contraseña" name="password" value={formData.password} onChange={handleChange} required/>
-//             </Grid>
-
-//             <Grid item size={6}>
-//               <TextField fullWidth label="Nombres" name="first_name" value={formData.first_name} onChange={handleChange} required/>
-//             </Grid>
-
-//             <Grid item size={6}>
-//               <TextField fullWidth label="Apellidos" name="last_name" value={formData.last_name} onChange={handleChange} required/>
-//             </Grid>
-
-//             <Grid item size={6}>
-//               <TextField fullWidth label="Número de empleado" name="employee_number" value={formData.employee_number} onChange={handleChange} required/>
-//             </Grid>
-//             <Grid item size={6}>
-//               <TextField
-//                 fullWidth
-//                 select
-//                 label="Rol"
-//                 name="role"
-//                 value={formData.role}
-//                 onChange={handleChange}
-//                 required
-//               >
-//                 <MenuItem value="PLANNER">Planner</MenuItem>
-//                 <MenuItem value="ADMIN">Admin</MenuItem>
-//                 <MenuItem value="WAREHOUSE">Warehouse</MenuItem>
-//               </TextField>
-//             </Grid>
-          
-//           </Grid>
-
-//           <Button type="submit" variant="contained" sx={{ mt: 2 }}>
-//            Crear Usuario
-//          </Button>
-//         </Paper>
-        
-//         <Divider sx={{ mb: 4 }} />
-
-//       </Box>
-//     </Container>
-//   );
-// };
-
-// export default CreateUser;
-
-//Código nuevo
-
 import { useState, useEffect } from 'react';
 import { 
   Button, 
@@ -290,7 +150,7 @@ const CreateUser = () => {
     setFormData({
       username: user.username,
       email: user.email,
-      password: '', // La contraseña no se debe pre-cargar por seguridad
+      password: '',
       first_name: user.first_name,
       last_name: user.last_name,
       employee_number: user.employee_number,
@@ -298,7 +158,7 @@ const CreateUser = () => {
     });
     setCurrentUserId(user.id);
     setEditMode(true);
-    window.scrollTo(0, 0); // Scroll al formulario
+    window.scrollTo(0, 0);
   };
 
   const handleDeleteClick = (userId) => {
