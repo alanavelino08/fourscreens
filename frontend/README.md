@@ -1,12 +1,42 @@
-# React + Vite
+# Docker Configuration & Deployment
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Create a docker network to connect containers with the next command:
 
-Currently, two official plugins are available:
+``` bash
+docker network create --driver bridge server-network
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Create a docker volume to persist data with the next command:
 
-## Expanding the ESLint configuration
+``` bash
+docker volume create --name storage-fourscreens
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Run to build and create docker image with the next command:
+
+``` bash
+# local
+docker build -t web-fourscreens:v$(date +%Y%m%d%H%M) .
+
+# github
+docker build -t ghcr.io/alanavelino08/web-fourscreens:v$(date +%Y%m%d%H%M) .
+```
+
+Check the docker images with the next command:
+
+``` bash
+docker images
+```
+
+Run to push the docker image to GitHub Container Registry with the next command:
+
+``` bash 
+export VERSION=v202505152211
+docker push ghcr.io/alanavelino08/web-fourscreens:v202505152211
+```
+
+Run the docker image
+
+``` bash
+docker run -d --name web-fourscreens --network server-network -p 80:80 web-fourscreens:v
+```
