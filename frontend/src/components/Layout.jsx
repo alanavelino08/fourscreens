@@ -25,6 +25,9 @@ import AddCardIcon from '@mui/icons-material/AddCard';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import ScreenSearchDesktopIcon from '@mui/icons-material/ScreenSearchDesktop';
+
 
 import { useState } from 'react';
 import { getCurrentUser, logout } from '../services/auth';
@@ -99,8 +102,9 @@ const Layout = () => {
           icon: <LocalShippingIcon />, 
           key: 'shipments',
           subitems: [
-            { text: 'Solicitudes', to: '/warehouse/requests', icon: <InboxIcon /> },
-            { text: 'Dashboard', to: '/warehouse/dashboard', icon: <DashboardIcon /> }
+            { text: 'Solicitudes', to: '/warehouse/requests', icon: <AssignmentIcon /> },
+            { text: 'Dashboard', to: '/warehouse/dashboard', icon: <AssessmentIcon /> },
+            { text: 'Busqueda', to: '/warehouse/allshipmentsdashboard', icon: <ScreenSearchDesktopIcon />},
           ]
         }
       );

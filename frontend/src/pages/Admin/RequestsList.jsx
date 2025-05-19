@@ -296,7 +296,7 @@ const ShipmentsList = ({ showAll }) => {
               <TableCell>Código</TableCell>
               <TableCell>Proyecto</TableCell>
               <TableCell>Fecha Requerida</TableCell>
-              <TableCell>Comentario</TableCell>
+              {/* <TableCell>Comentario</TableCell> */}
               <TableCell>N° de Pedidos</TableCell>
               {/* {showAll && !isWarehouseUser && <TableCell>Creado por</TableCell>} */}
               {isAdminUser && <TableCell>Creado por</TableCell>}
@@ -304,6 +304,7 @@ const ShipmentsList = ({ showAll }) => {
               <TableCell>Fecha preparacion</TableCell>
               <TableCell>Tomado por</TableCell>
               <TableCell>Seguimiento por</TableCell>
+              <TableCell>Fecha envio</TableCell>
               {/* {isWarehouseUser && <TableCell>Aprobado Por</TableCell>} */}
               <TableCell>Estado</TableCell>
               <TableCell>Acciones</TableCell>
@@ -345,9 +346,14 @@ const ShipmentsList = ({ showAll }) => {
                     }}
                   >
                     {new Date(shipment.requirement_date).toLocaleString()}
-                    {/* {new Date(shipment.requirement_date).toLocaleString('en-US', { timeZone: 'UTC' })} */}
-                    <p>Faltan <CountdownTimer requirementDate={shipment.requirement_date} /> hrs</p>
-                    {isUrgent(shipment.requirement_date) && (
+                    
+                    {shipment.status !== 'ENVIADO' && (
+                      <p>
+                        Faltan <CountdownTimer requirementDate={shipment.requirement_date} /> hrs
+                      </p>
+                    )}
+                    {/* <p>Faltan <CountdownTimer requirementDate={shipment.requirement_date} /> hrs</p> */}
+                    {isUrgent(shipment.requirement_date) && shipment.status !== 'ENVIADO' && (
                       <Chip 
                         label="URGENTE" 
                         size="small" 
@@ -360,7 +366,7 @@ const ShipmentsList = ({ showAll }) => {
                     )}
                   </Box>
                 </TableCell>
-                <TableCell>{shipment.comment || '-'}</TableCell>
+                {/* <TableCell>{shipment.comment || '-'}</TableCell> */}
                 <TableCell>{shipment.requests?.length || 0}</TableCell>
                 {/* {showAll && !isWarehouseUser && ( */}
                 {isAdminUser && (
@@ -386,6 +392,12 @@ const ShipmentsList = ({ showAll }) => {
                   {shipment?.give_progress_by?.id 
                     ? `${shipment.give_progress_by.first_name} ${shipment.give_progress_by.last_name}` 
                     : 'No asignado'}
+                </TableCell>
+                <TableCell>
+                  {
+                    shipment?.delivered_at
+                    ? new Date(shipment.delivered_at).toLocaleString()
+                    : 'pendiente'}
                 </TableCell>
                 {/* {isWarehouseUser && (<TableCell>
                   {shipment.confirmed_by.first_name} {shipment.confirmed_by.last_name}
@@ -429,7 +441,7 @@ const ShipmentsList = ({ showAll }) => {
                         label={
                           new Date(shipment.delivered_at) < new Date(shipment.requirement_date) 
                             ? "Enviado en tiempo" 
-                            : "Enviado con retraso"
+                            : "Enviado fuera de tiempo"
                         }
                         sx={{
                           backgroundColor: 
@@ -496,6 +508,7 @@ const ShipmentsList = ({ showAll }) => {
                           if (shipment.status === 'PENDIENTE') return true;
                           // Si no es PENDIENTE, excluir PENDIENTE
                           return option.value !== 'PENDIENTE';
+                          
                         }).map((option) => (
                           <MenuItem key={option.value} value={option.value}>
                             {option.label}

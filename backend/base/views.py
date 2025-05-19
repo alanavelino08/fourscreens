@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status, permissions, generics
+from rest_framework import viewsets, status, permissions, generics, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from .models import User, Request, PartNumber, Shipment
@@ -8,11 +8,11 @@ from .serializers import CustomTokenObtainPairSerializer
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.decorators import api_view
 from django.http import JsonResponse
 from rest_framework.generics import ListAPIView
 from datetime import datetime
 from django.db import models
+from django.db.models import Count
 
 class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -138,7 +138,7 @@ class RequestViewSet(viewsets.ModelViewSet):
         except PartNumber.DoesNotExist:
             return Response({'exists': False}, status=404)
         
-#Dashboard
+#Dashboard Shipments diferentes de ENVIADOS y CANCELADOS
 class PendingShipmentsDashboard(generics.ListAPIView):
     serializer_class = ShipmentSerializer
 
@@ -188,53 +188,54 @@ class PendingShipmentsDashboard(generics.ListAPIView):
             return 'error'
         return 'expired'
     
-# #To test
-# @api_view(['GET'])
-# def dashboard_data(request):
-#     if request.method == 'GET':
+class ShipmentsDashboard(generics.ListAPIView):
+    serializer_class = ShipmentSerializer
+    queryset = Shipment.objects.all()
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['shipment_code']  # Permite búsqueda por código
 
-#         #total_requests = Request.objects.count()
-#         #total_users = User.objects.count()
-#         #total_approved_requests = Request.objects.filter(status='APPROVED').count()
-#         total_pending_requests = Request.objects.filter(status='PENDING').count()
-#         #list_of_requests = Request.objects.all()
-#         pending_request_list = Request.objects.filter(status="PENDING").values('id', 'part_number', 'qty', 'line', 'order', 'status', 'request_date', 'requirement_date')
-        
-#         data = {
-#             # 'total_requests': total_requests,
-#             # 'total_users': total_users,
-#             #'total_approved_requests': total_approved_requests,
-#             'total_pending_requests': total_pending_requests,
-#             #'list of requests': list_of_requests.values('id', 'line', 'order', 'status','request_date', 'created_by')
-#             'list of requests': pending_request_list
-#         }
-        
-#         return Response(data, status=status.HTTP_200_OK)
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
 
-# #Shows all pending requests
-# @api_view(['GET'])
-# def get_pending_requests(request):
-#     if request.method == 'GET':
-#         pending_data = {}
+        now = timezone.now()
+        data = serializer.data
+        expired_count = 0
 
-#         dashboard_pending = Request.objects.filter(status="PENDING").select_related('part_number')
+        for shipment in data:
+            try:
+                requirement_date = datetime.strptime(
+                    shipment['requirement_date'], '%Y-%m-%dT%H:%M:%S%z'
+                )
+                delta = requirement_date - now
+                hours_left = delta.total_seconds() / 3600
+                shipment['hours_left'] = hours_left
+                shipment['urgency_level'] = self.get_urgency_level(hours_left)
+                if hours_left < 0:
+                    expired_count += 1
+            except Exception:
+                shipment['hours_left'] = None
+                shipment['urgency_level'] = 'unknown'
 
-#         for req in dashboard_pending:
-#             pending_data[req.id] = {
-#                 'part_number': req.part_number.ikor_number,
-#                 'qty': req.qty,
-#                 'line': req.line,
-#                 'order': req.order,
-#                 'status': req.status,
-#                 'request_date': req.request_date.isoformat(),
-#                 'requirement_date': req.requirement_date.isoformat()
-#             }
+        stats = {
+            'total_shipments': queryset.count(),
+            'status': queryset.values('status').annotate(count=Count('id')),
+            #'urgent_count': sum(1 for s in data if s['urgency_level'] == 'error'),
+            #'expired_count': expired_count
+        }
 
-#         return JsonResponse(pending_data, status=status.HTTP_200_OK)
-    
-# @api_view(['GET'])
-# def get_all_shipments(request):
-#     if request.method == 'GET':
-#         pending_sh_data = {}
+        return Response({
+            'shipments': data,
+            'stats': stats
+        })
 
-#         dashboard_to_show = Request.objects.filter(status="PENDING").select_related('')
+    def get_urgency_level(self, hours_left):
+        if hours_left is None:
+            return 'unknown'
+        elif hours_left >= 24:
+            return 'success'
+        elif hours_left >= 9:
+            return 'warning'
+        elif hours_left >= 0:
+            return 'error'
+        return 'expired'

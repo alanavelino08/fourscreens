@@ -10,15 +10,21 @@ const ShipmentsDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const user = getCurrentUser();
+  //const user = getCurrentUser();
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
+    setUser(getCurrentUser());
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
     const fetchData = async () => {
       try {
-        if (!user) {
-          navigate('/login');
-          return;
-        }
+        // if (!user) {
+        //   navigate('/login');
+        //   return;
+        // }
 
         const response = await api.get('/shipments/dashboard/');
         setData(response.data);
@@ -40,7 +46,7 @@ const ShipmentsDashboard = () => {
     const interval = setInterval(fetchData, 60000); // Actualizar cada minuto
 
     return () => clearInterval(interval);
-  }, [navigate, user]);
+  }, [user, navigate]);
 
   const getUrgencyStyle = (hoursLeft) => {
     if (hoursLeft >= 24) return { bgcolor: 'success.light', color: 'white' };
@@ -65,11 +71,18 @@ const ShipmentsDashboard = () => {
     // });
 
   const columns = [
-    { field: 'shipment_code', headerName: 'Código', width: 150 },
+    { field: 'shipment_code', headerName: 'Código', width: 150,
+      renderHeader: (params) => (
+        <strong>{params.colDef.headerName}</strong>
+      )
+    },
     {
       field: 'requests',
       headerName: 'Proyecto',
       width: 100,
+      renderHeader: (params) => (
+        <strong>{params.colDef.headerName}</strong>
+      ),
       renderCell: (params) => (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
         {params.value && params.value.length > 0 ? (
@@ -87,17 +100,27 @@ const ShipmentsDashboard = () => {
         </Box>
        )
     },
-    { field: 'status', headerName: 'Estado', width: 150 },
+    { field: 'status', headerName: 'Estado', width: 150,
+      renderHeader: (params) => (
+        <strong>{params.colDef.headerName}</strong>
+      )
+     },
     { 
       field: 'requirement_date', 
       headerName: 'Fecha Requerida', 
       width: 200,
+      renderHeader: (params) => (
+        <strong>{params.colDef.headerName}</strong>
+      ),
       renderCell: (params) => new Date(params.value).toLocaleString() 
     },
     {
       field: 'responsable',
       headerName: 'Responsable',
       width: 180,
+      renderHeader: (params) => (
+        <strong>{params.colDef.headerName}</strong>
+      ),
       renderCell: (params) => {
           const takedBy = params.row?.taked_by;
           const fullName = takedBy ? `${takedBy.first_name} ${takedBy.last_name}` : 'Sin asignar';
@@ -110,9 +133,24 @@ const ShipmentsDashboard = () => {
       }
     },
     {
+      field: "preparation_at",
+      headerName: "Fecha preparación",
+      width: 200,
+      renderHeader: (params) => (
+        <strong>{params.colDef.headerName}</strong>
+      ),
+      renderCell: (params) => 
+        params.value
+        ? new Date(params.value).toLocaleString()
+        : "Pendiente" 
+    },
+    {
       field: 'hours_left',
       headerName: 'Tiempo Restante',
       width: 150,
+      renderHeader: (params) => (
+        <strong>{params.colDef.headerName}</strong>
+      ),
       renderCell: (params) => {
         const style = getUrgencyStyle(params.value);
         return (
@@ -131,6 +169,9 @@ const ShipmentsDashboard = () => {
       field: 'tiempo_toma',
       headerName: 'Tiempo en tomarlo',
       width: 150,
+      renderHeader: (params) => (
+        <strong>{params.colDef.headerName}</strong>
+      ),
       renderCell: (params) => {
       const createdAt = new Date(params.row?.created_at);
       const preparationAt = new Date(params.row?.preparation_at);
@@ -140,9 +181,21 @@ const ShipmentsDashboard = () => {
       const diffMs = preparationAt - createdAt;
       const diffHours = diffMs / (1000 * 60 * 60); // convierte a horas
 
+      const formatHours = (hours) => {
+        const fullHours = Math.floor(hours);
+        const minutes = Math.round((hours - fullHours) * 60);
+
+        if (minutes === 0) return `${fullHours} hrs`;
+
+        if (fullHours === 0) return `${minutes} min`;
+
+        return `${fullHours} hrs ${minutes} min`;
+      };
+
       return (
        <Typography variant="subtitle">
-        {diffHours.toFixed(2)} h
+        {/* {diffHours.toFixed(2)} h */}
+        {formatHours(diffHours)}
       </Typography>
        );
       }

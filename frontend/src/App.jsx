@@ -10,6 +10,7 @@ import CreateRequest from './pages/Planner/CreateRequest';
 import CreatePart from './pages/Admin/CreatePart';
 import ProtectedRoute from './components/ProtectedRoute';
 import Datadashboard from './pages/Warehouse/Datadashboard';
+import Alldatadashboard from './pages/Warehouse/Alldatadashboard';
 
 function App() {
   return (
@@ -59,6 +60,12 @@ function App() {
         <Route path="/warehouse/dashboard" element={
           <ProtectedRoute allowedRoles={['WAREHOUSE']}>
             <Datadashboard showAll={true} warehouseView={true} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/warehouse/allshipmentsdashboard" element={
+          <ProtectedRoute allowedRoles={['WAREHOUSE']}>
+            <Alldatadashboard showAll={true} warehouseView={true} />
           </ProtectedRoute>
         } />
 

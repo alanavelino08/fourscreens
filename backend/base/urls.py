@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard
+from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard
 from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
@@ -21,4 +21,5 @@ urlpatterns = [
     path('shipments/<int:pk>/update_status/', ShipmentViewSet.as_view({'patch': 'update_status'}), name='shipment-update-status'),
     path('users/<int:pk>/', UserViewSet.as_view({'patch': 'update'}), name='user-update-data'),
     path('shipments/dashboard/', PendingShipmentsDashboard.as_view(), name='shipments-dashboard'),
+    path('allshipments/dashboard/', ShipmentsDashboard.as_view(), name='allshipments-dashboard'),
 ]
