@@ -37,5 +37,5 @@ docker push ghcr.io/alanavelino08/api-fourscreens
 Run the docker image
 
 ``` bash
-docker run -d --name api-fourscreens --network server-network -p 8000:8000 api-fourscreens
+docker run -d --name api-fourscreens -e DEBUG=False --network server-network -p 8000:8000 api-fourscreens
 ```
