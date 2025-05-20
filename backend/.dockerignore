@@ -39,3 +39,7 @@ docker-compose.override.yml
 # Static/media (if generated at runtime)
 staticfiles/
 media/
+conf/
+*.md
+Dockerfile
+.dockerignore
