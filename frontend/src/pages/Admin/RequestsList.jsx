@@ -7,7 +7,8 @@ import {
   Pagination, Stack, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions,
   Menu, MenuItem, Select, FormControl, InputLabel, TextField,
-  InputAdornment, IconButton
+  InputAdornment, IconButton, AppBar, Toolbar, Slide, Grid, Container, Snackbar,
+  Alert, Card, CardActionArea, CardMedia, CardContent, Divider 
 } from '@mui/material';
 import api from '../../services/api';
 import { getCurrentUser } from '../../services/auth';
@@ -15,7 +16,8 @@ import { makeStyles } from '@mui/styles';
 
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
-
+import CloseIcon from '@mui/icons-material/Close';
+import { Translate } from '@mui/icons-material';
 //Negritas (Bold)
 const useStyles = makeStyles({
   boldHeader: {
@@ -23,6 +25,10 @@ const useStyles = makeStyles({
       fontWeight: 'bold',
     },
   },
+});
+
+const Transition = React.forwardRef(function Transition(props, ref) {
+  return <Slide direction="up" ref={ref} {...props} />;
 });
 
 // Codigo timer descendente - hora actual - requerimiento
@@ -103,32 +109,115 @@ const ShipmentsList = ({ showAll }) => {
 
   const isWarehouseUser = user?.role === 'WAREHOUSE';
   const isAdminUser = user?.role === 'ADMIN';
+  const isPlannerUser = user?.role === 'PLANNER';
+
+  // const fetchShipments = async (page = 1) => {
+  //   try {
+  //     setLoading(true);
+  //     // const endpoint = isWarehouseUser 
+  //     //   ? '/shipments/list/?status=CONFIRMED' 
+  //     //   : '/shipments/list/';
+  //     const endpoint = isWarehouseUser 
+  //     ? '/shipments/list/?status=EN PREPARACION,TERMINADO,VALIDACION CALIDAD,ESPERA CAMION,ENVIADO,EN ESPERA,CANCELADO' 
+  //     : '/shipments/list/';
+  //     const response = await api.get(`${endpoint}?page=${page}`);
+  //     setShipments(response.data.results);
+  //     setPagination({
+  //       count: response.data.count,
+  //       currentPage: page,
+  //       totalPages: Math.ceil(response.data.count / 10)
+  //     });
+  //   } catch (error) {
+  //     console.error('Error fetching shipments:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  // const fetchShipments = async (page = 1) => {
+  //   try {
+  //     setLoading(true);
+  //     let endpoint = '/shipments/list/';
+
+  //     if (isWarehouseUser) {
+  //       endpoint = '/shipments/list/?status=EN PREPARACION,TERMINADO,VALIDACION CALIDAD,ESPERA CAMION,ENVIADO,EN ESPERA,CANCELADO';
+  //     } else {
+  //       if (tabValue === 0) {
+  //         // Pendientes
+  //         endpoint = '/shipments/list/?status=PENDIENTE';
+  //       } else if (tabValue === 1) {
+  //         // Procesados (cualquier estado excepto pendiente)
+  //         endpoint = '/shipments/list/?exclude_status=PENDIENTE';
+  //       } else if (tabValue === 2) {
+  //         // Todos
+  //         endpoint = '/shipments/list/';
+  //       }
+  //     }
+
+  //     const separator = endpoint.includes('?') ? '&' : '?';
+  //     const response = await api.get(`${endpoint}${separator}page=${page}`);
+  //     //const response = await api.get(`${endpoint}&page=${page}`);
+  //     setShipments(response.data.results);
+  //     setPagination({
+  //       count: response.data.count,
+  //       currentPage: page,
+  //       totalPages: Math.ceil(response.data.count / 10)
+  //     });
+  //   } catch (error) {
+  //     console.error('Error fetching shipments:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const fetchShipments = async (page = 1) => {
-    try {
-      setLoading(true);
-      // const endpoint = isWarehouseUser 
-      //   ? '/shipments/list/?status=CONFIRMED' 
-      //   : '/shipments/list/';
-      const endpoint = isWarehouseUser 
-      ? '/shipments/list/?status=EN PREPARACION,TERMINADO,VALIDACION CALIDAD,ESPERA CAMION,ENVIADO,EN ESPERA,CANCELADO' 
-      : '/shipments/list/';
-      const response = await api.get(`${endpoint}?page=${page}`);
+  try {
+    setLoading(true);
+    let endpoint = '/shipments/list/';
+    const params = new URLSearchParams();
+
+    if (isWarehouseUser) {
+      params.append(
+        'status',
+        'EN PREPARACION,TERMINADO,VALIDACION CALIDAD,ESPERA CAMION,ENVIADO,EN ESPERA,CANCELADO'
+      );
+      params.append('taked_by', user.id);  // opcional si quieres filtrar por el warehouse actual
+      params.append('paginate', 'false');  // 👈 para que el backend no pagine
+    } else {
+      if (tabValue === 0) {
+        params.append('status', 'PENDIENTE');
+      } else if (tabValue === 1) {
+        params.append('exclude_status', 'PENDIENTE');
+      }
+      // Si no es warehouse y tabValue === 2, no agregamos filtros
+      params.append('page', page);
+    }
+
+    const response = await api.get(`${endpoint}?${params.toString()}`);
+
+    // Si no está paginado, usa directamente los datos
+    if (isWarehouseUser || !response.data.results) {
+      setShipments(Array.isArray(response.data.results) ? response.data.results : response.data);  // Asume que el backend regresa una lista sin 'results'
+      setPagination({ count: 0, currentPage: 1, totalPages: 1 });
+    } else {
       setShipments(response.data.results);
       setPagination({
         count: response.data.count,
         currentPage: page,
         totalPages: Math.ceil(response.data.count / 10)
       });
-    } catch (error) {
-      console.error('Error fetching shipments:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('Error fetching shipments:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   useEffect(() => {
-    fetchShipments();
+    fetchShipments(1);
   }, [tabValue]);
 
   useEffect(() => {
@@ -149,6 +238,30 @@ const ShipmentsList = ({ showAll }) => {
 
   //Cambiar estatus - WH
   const handleStatusChange = async (shipmentId, newStatus) => {
+
+    const shipment = shipments.find(s => s.id === shipmentId);
+
+    //El flujo del shipment debe de pasar primero por (EN PREPARACION)
+    if (shipment.status === 'PENDIENTE' && newStatus !== 'EN PREPARACION') {
+      //alert('Debes pasar por el estatus "EN PREPARACIÓN" antes de cambiar a otro estatus.');
+      setSnackbar({
+          open: true,
+          message: 'Debes pasar por el estatus "EN PREPARACIÓN" antes de cambiar a otro estatus.',
+          severity: 'error'
+        });
+    return;
+    }
+
+    //NO enviar shipment sin un albaran asignado
+    if (newStatus === 'ENVIADO' && !shipment.albaran) {
+      setSnackbar({
+        open: true,
+        message: 'No se puede cambiar a "ENVIADO" sin un albarán asignado.',
+        severity: 'error'
+      });
+      return;
+    }
+
     try {
       //await api.patch(`/shipments/${shipmentId}/`, { status: newStatus });
       await api.patch(`/shipments/${shipmentId}/update_status/`, { status: newStatus });
@@ -214,10 +327,11 @@ const ShipmentsList = ({ showAll }) => {
     setOpenDetails(false);
   };
 
-  // Filtrar embarques según el rol
-  const filteredShipments = showAll 
+  // Filtrar embarques pendieNtes - procesados por usuario y todos
+  const filteredShipments = (showAll || tabValue === 2) 
     ? shipments 
-    : shipments.filter(shipment => shipment.created_by === user?.id);
+    : shipments.filter(shipment => shipment.created_by && shipment.created_by.id === user?.id)
+      //shipments.filter(shipment => shipment.created_by === user?.id);
 
   const pendingShipments = isWarehouseUser ? [] : filteredShipments.filter(shipment => shipment.status === 'PENDIENTE');
 
@@ -230,6 +344,216 @@ const ShipmentsList = ({ showAll }) => {
 
   //Input busqueda
   const [searchTerm, setSearchTerm] = useState('');
+
+  // pop-up para mandar albaran
+  const [open, setOpen] = useState(false);
+  const [comment_albaran, setCommentAlbaran] = useState('');
+
+  const resetAlbaranInput = () => {
+    setFormData({
+      albaran: '',
+    });
+  };
+
+  const handleChipClick = (shipment) => {
+    if (shipment.status === 'TERMINADO') {
+      setSelectedShipment(shipment);
+      setOpen(true);
+    }
+  };
+
+  const handleClose = () => setOpen(false);
+
+  const handleSave = async (shipmentId, albaran) => {
+    
+    if (!albaran.trim()) {
+      setSnackbar({
+          open: true,
+          message: 'El campo alabaran no puede enviarse vacío',
+          severity: 'error'
+        });
+      return;
+    }
+
+    try {
+      
+      const response = await api.patch(`/shipments/${shipmentId}/update_add_albaran/`, {
+        albaran: albaran.trim(),
+      });
+
+      setSnackbar({
+          open: true,
+          message: response.data.success || 'Albarán asignado correctamente.',
+          severity: 'success'
+        });
+      
+      //resetAlbaranInput();
+      handleClose();
+    } catch (error) {
+      const data = error.response?.data;
+      if (data?.error?.includes('albaran ya está registrado')) {
+      setSnackbar({
+        open: true,
+        message: 'Este albarán ya existe en otro embarque.',
+        severity: 'error',
+      });
+    } else if (data?.error) {
+      setSnackbar({
+        open: true,
+        message: data.error,
+        severity: 'error',
+      });
+    } else {
+      setSnackbar({
+        open: true,
+        message: 'Error al guardar el albarán.',
+        severity: 'error',
+      });
+    }
+    }
+  };
+
+  // Para pop-up - TRANSPORTE
+
+  const [openTransport, setOpenTransport] = React.useState(false);
+  const [openTransportView, setOpenTransportView] = useState(false);
+  
+  const handleClickOpenTransport = (shipment) => {
+    setSelectedShipment(shipment);
+
+    if (shipment.transport) {
+      setOpenTransportView(true);
+    } else {
+      setOpenTransport(true);
+    }
+
+    // setOpenTransport(true);
+  };
+
+  const handleCloseTransport = () => {
+    setOpenTransport(false);
+  };
+
+  const [transportData, setTransportData] = useState({
+    placas: '',
+    engomado: '',
+    caat: '',
+    tag: '',
+    rfc: '',
+    empresa: '',
+    conductor: ''
+  });
+
+  const resetForm = () => {
+    setFormData({
+      placas: '',
+      engomado: '',
+      caat: '',
+      tag: '',
+      rfc: '',
+      empresa: '',
+      conductor: ''
+    });
+  };
+
+  const handleChange = (e) => {
+    setTransportData({ ...transportData, [e.target.name]: e.target.value });
+  };
+
+  const [snackbar, setSnackbar] = useState({
+      open: false,
+      message: '',
+      severity: 'success'
+    });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const dataToSend = { ...transportData, shipment_id: selectedShipment?.id };
+        //console.log(dataToSend, 'que es esto?')
+        await api.post('/transports/', dataToSend);
+        setSnackbar({
+          open: true,
+          message: 'Datos transporte agregados exitosamente',
+          severity: 'success'
+        });
+        
+        //resetForm();
+        setOpenTransport(false);
+      
+    } catch (error) {
+      console.error('Error:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.detail || 'Error al procesar la solicitud',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar(prev => ({ ...prev, open: false }));
+  };
+
+  //pop up para comentario almacen
+  const [whComment, setWhComment] = useState('');
+  const [openWarehouseCommentDialog, setOpenWarehouseCommentDialog] = useState(false);
+  
+  const handleCloseWH = () => setOpenWarehouseCommentDialog(false);
+
+  const handleClickOpenwhcomment = (shipment) => {
+    setSelectedShipment(shipment);
+    setOpenWarehouseCommentDialog(true);
+  }
+
+  const handleSaveWhComment = async (shipmentId) => {
+    if (!whComment.trim()) return; // no enviar si está vacío
+
+    try {
+      const response = await api.patch(`/shipments/${shipmentId}/update_wh_comment/`, { wh_comment: whComment });
+
+      setSnackbar({
+          open: true,
+          message: response.data.success || 'comentario agregado correctamente.',
+          severity: 'success'
+        });
+      setOpenWarehouseCommentDialog(false);
+      setWhComment('');
+    } catch (error) {
+      console.error('Error guardando comentario de almacén:', error);
+    }
+  };
+
+
+  //pop up para comentario admin
+  const [adminComment, setAdminComment] = useState('');
+  const [openAdminCommentDialog, setOpenAdminCommentDialog] = useState(false);
+  const handleCloseAdmin = () => setOpenAdminCommentDialog(false);
+
+  const handleClickOpenadmincomment = (shipment) => {
+    setSelectedShipment(shipment);
+    setOpenAdminCommentDialog(true);
+  }
+
+  const handleSaveAdminComment = async (shipmentId) => {
+    if (!adminComment.trim()) return; // no enviar si está vacío
+
+    try {
+      const response = await api.patch(`/shipments/${shipmentId}/update_admin_comment/`, { admin_comment: adminComment });
+
+      setSnackbar({
+          open: true,
+          message: response.data.success || 'comentario agregado correctamente.',
+          severity: 'success'
+        });
+      setOpenAdminCommentDialog(false);
+      setAdminComment('');
+    } catch (error) {
+      console.error('Error guardando comentario de admin:', error);
+    }
+  };
+
+
   
 
   if (loading) {
@@ -279,6 +603,7 @@ const ShipmentsList = ({ showAll }) => {
         >
           <Tab label="Pendientes" />
           <Tab label="Procesados" />
+          <Tab label="Todos"/>
         </Tabs>
       )}
       
@@ -311,23 +636,38 @@ const ShipmentsList = ({ showAll }) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {/* {(isWarehouseUser ? processedShipments : (tabValue === 0 ? pendingShipments : processedShipments))
-            .sort((a, b) => new Date(a.requirement_date) - new Date(b.requirement_date))
-            .map((shipment) => ( */}
-            {/* {(isWarehouseUser ? processedShipments : (tabValue === 0 ? pendingShipments : processedShipments))
-              .filter(shipment => 
-                searchTerm === '' || 
-                shipment.shipment_code.toLowerCase().includes(searchTerm.toLowerCase()))
-              .sort((a, b) => new Date(a.requirement_date) - new Date(b.requirement_date))
-              .map((shipment) => ( */}
               {(isWarehouseUser ? processedShipments : (tabValue === 0 ? pendingShipments : processedShipments))
                 .filter(shipment => 
                   searchTerm === '' || 
                   shipment.shipment_code.toLowerCase().includes(searchTerm.toLowerCase()))
-                .sort((a, b) => new Date(a.requirement_date) - new Date(b.requirement_date))
+                .sort((a, b) => {
+                  const numA = parseInt(a.shipment_code.match(/\d+/)?.[0] || 0);
+                  const numB = parseInt(b.shipment_code.match(/\d+/)?.[0] || 0);
+
+                  if (numA !== numB) {
+                    return numB - numA;
+                  }
+
+                  return new Date(a.requirement_date) - new Date(b.requirement_date); // luego por requirement_date asc
+                })
                 .map((shipment) => (
               <TableRow key={shipment.id}>
-                <TableCell>{shipment.shipment_code}</TableCell>
+                <TableCell
+                // onClick={() => {
+                //   setSelectedShipment(shipment);
+                //   handleClickOpenTransport(true);
+                // }}
+                onClick={() => {
+                  if (isPlannerUser) {
+                    handleClickOpenTransport(shipment)
+                  } else if (isWarehouseUser) {
+                    handleClickOpenwhcomment(shipment)
+                  } else if (isAdminUser) {
+                    handleClickOpenadmincomment(shipment)
+                  }
+                }}
+                style={{ cursor: 'pointer', textDecoration: 'underline'}}
+                >{shipment.shipment_code}</TableCell>
                 <TableCell>
                   <Typography fontWeight="bold">
                   {shipment.requests[0].project}</Typography></TableCell>
@@ -371,7 +711,7 @@ const ShipmentsList = ({ showAll }) => {
                 {/* {showAll && !isWarehouseUser && ( */}
                 {isAdminUser && (
                   <TableCell>
-                    {shipment.created_by === user?.id ? 'Tú' : `${shipment.created_by}`}
+                    {shipment.created_by === user?.id ? 'Tú' : `${shipment.created_by.first_name} ${shipment.created_by.last_name}`}
                   </TableCell>
                 )}
                 {/*Fecha de creacion */}
@@ -433,6 +773,8 @@ const ShipmentsList = ({ showAll }) => {
                         shipment.status === 'EN ESPERA' ? 'warning' :
                         shipment.status === 'ENVIADO' ? 'success' : 'error'
                       } 
+                      onClick={() => handleChipClick(shipment)}
+                      sx={{ cursor: shipment.status === 'TERMINADO' ? 'pointer' : 'default' }}
                     />
                     
                     {/* Nuevo Chip para el tiempo de envío (solo si está ENVIADO) */}
@@ -455,6 +797,314 @@ const ShipmentsList = ({ showAll }) => {
                       />
                     )}
                   </Stack>
+
+                  {/* Dialog para ingresar albaran*/}
+                  {/* {isWarehouseUser && (
+                  <Dialog open={open} onClose={handleClose}>
+                    <DialogTitle>Embarque <strong>{selectedShipment?.shipment_code}</strong> TERMINADO </DialogTitle>
+                    <DialogContent>
+                      <TextField
+                        autoFocus
+                        margin="dense"
+                        label="Ingresa Albaran"
+                        name="albaran"
+                        required
+
+                        fullWidth
+                        value={comment_albaran}
+                        onChange={(e) => setCommentAlbaran(e.target.value)}
+                      />
+                    </DialogContent>
+                    <DialogActions>
+                      <Button onClick={handleClose}>Cancelar</Button>
+                      <Button onClick={() => handleSave(selectedShipment.id, comment_albaran)}
+                        color="primary" variant="contained">Enviar</Button>
+                    </DialogActions>
+                  </Dialog>
+                  )} */}
+
+                  {isWarehouseUser && selectedShipment && (
+                    <Dialog open={open} onClose={handleClose}>
+                      <DialogTitle>
+                        Embarque <strong>{selectedShipment.shipment_code}</strong> TERMINADO
+                      </DialogTitle>
+                      <DialogContent>
+                        {selectedShipment.albaran ? (
+                          <>
+                            <p>Este embarque ya tiene un albarán asignado:</p>
+                            <TextField
+                              fullWidth
+                              value={selectedShipment.albaran}
+                              InputProps={{
+                                readOnly: true,
+                              }}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <TextField
+                              autoFocus
+                              margin="dense"
+                              label="Ingresa Albarán"
+                              name="albaran"
+                              required
+                              fullWidth
+                              value={comment_albaran}
+                              onChange={(e) => setCommentAlbaran(e.target.value)}
+                            />
+                          </>
+                        )}
+                      </DialogContent>
+                      <DialogActions>
+                        <Button onClick={handleClose}>Cerrar</Button>
+                        {!selectedShipment.albaran && (
+                          <Button
+                            onClick={() => handleSave(selectedShipment.id, comment_albaran)}
+                            color="primary"
+                            variant="contained"
+                          >
+                            Enviar
+                          </Button>
+                        )}
+                      </DialogActions>
+                    </Dialog>
+                  )}
+
+
+                  {/*Dialog para formulario de transporte */}
+                   <Dialog
+                      fullScreen
+                      open={openTransport}
+                      onClose={handleCloseTransport}
+                      TransitionComponent={Transition}
+                    >
+                      <AppBar sx={{ position: 'relative' }}>
+                        <Toolbar>
+                          <IconButton
+                            edge="start"
+                            color="inherit"
+                            onClick={handleCloseTransport}
+                            aria-label="close"
+                          >
+                            <CloseIcon />
+                          </IconButton>
+                          <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+                            Datos transporte para embarque: <strong>{selectedShipment?.shipment_code}</strong>
+                          </Typography>
+                          <Button autoFocus color="inherit" onClick={handleSubmit}>
+                            Guardar
+                          </Button>
+                        </Toolbar>
+                      </AppBar>
+                      <Container maxWidth="md">
+                      <Box sx={{ p: 3 }}>
+                        <TextField
+                          fullWidth
+                          margin="normal"
+                          label="Placas"
+                          name="placas"
+                          required
+                          value={transportData.placas}
+                          onChange={handleChange}
+                        />
+                        <TextField
+                          fullWidth
+                          margin="normal"
+                          label="Engomado"
+                          name="engomado"
+                          required
+                          value={transportData.engomado}
+                          onChange={handleChange}
+                        />
+                        <TextField
+                          fullWidth
+                          margin="normal"
+                          label="CAAT"
+                          name="caat"
+                          required
+                          value={transportData.caat}
+                          onChange={handleChange}
+                        />
+                        <TextField
+                          fullWidth
+                          margin="normal"
+                          label="TAG"
+                          name="tag"
+                          required
+                          value={transportData.tag}
+                          onChange={handleChange}
+                        />
+                        <TextField
+                          fullWidth
+                          margin="normal"
+                          label="RFC"
+                          name="rfc"
+                          value={transportData.rfc}
+                          onChange={handleChange}
+                        />
+                        <TextField
+                          fullWidth
+                          margin="normal"
+                          label="Empresa"
+                          name="empresa"
+                          required
+                          value={transportData.empresa}
+                          onChange={handleChange}
+                        />
+                        <TextField
+                          fullWidth
+                          margin="normal"
+                          label="Conductor"
+                          name="conductor"
+                          required
+                          value={transportData.conductor}
+                          onChange={handleChange}
+                        />
+                      </Box>
+                      </Container>
+                    </Dialog>
+
+                    {/*Mostrar Dialog en caso de que el embarque ya tenga datos de transporte */}
+                    <Dialog
+                      fullScreen
+                      open={openTransportView}
+                      onClose={() => setOpenTransportView(false)}
+                      TransitionComponent={Transition}
+                    >
+                      <AppBar sx={{ position: 'relative' }}>
+                        <Toolbar>
+                          <IconButton edge="start" color="inherit" onClick={() => setOpenTransportView(false)} aria-label="close">
+                            <CloseIcon />
+                          </IconButton>
+                          <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+                            Transporte registrado de embarque: <strong> {selectedShipment?.shipment_code} </strong>
+                          </Typography>
+                        </Toolbar>
+                      </AppBar>
+                      <Container maxWidth="md" style={{display:'flex', justifyContent:'center', alignItems: 'center', minHeight:'100vh', padding:'20px'}}>
+                        <Card sx={{ maxWidth: 500, width:'100%', textAlign:'center', margin:'auto' }}>
+                          <CardActionArea>
+                            <CardMedia
+                              component="img"
+                              height="210"
+                              image="../src/assets/truck.png"
+                              alt="green iguana"
+                            />
+                            <CardContent>
+                              <Typography gutterBottom variant="h5" component="div">
+                                <strong>Datos de transporte</strong>
+                              </Typography>
+                              <Typography variant="subtitle1"><strong>Placas:</strong> {selectedShipment?.transport?.placas}</Typography>
+                                              <Typography variant="subtitle1"><strong>Engomado:</strong> {selectedShipment?.transport?.engomado}</Typography>
+                                              <Typography variant="subtitle1"><strong>CAAT:</strong> {selectedShipment?.transport?.caat}</Typography>
+                                              <Typography variant="subtitle1"><strong>TAG:</strong> {selectedShipment?.transport?.tag}</Typography>
+                                              <Typography variant="subtitle1"><strong>RFC:</strong> {selectedShipment?.transport?.rfc}</Typography>
+                                              <Typography variant="subtitle1"><strong>Empresa:</strong> {selectedShipment?.transport?.empresa}</Typography>
+                                              <Typography variant="subtitle1"><strong>Conductor:</strong> {selectedShipment?.transport?.conductor}</Typography>
+                            </CardContent>
+                          </CardActionArea>
+                        </Card>
+                      </Container>
+                    </Dialog>
+
+                    {/* Dialog comentario WH*/}
+                    <Dialog open={openWarehouseCommentDialog} onClose={() => setOpenWarehouseCommentDialog(false)}>
+                      {selectedShipment && (
+                        <>
+                          <DialogTitle>
+                            ¿Quieres agregar un comentario para el embarque <strong>{selectedShipment.shipment_code}</strong>?
+                          </DialogTitle>
+
+                          <DialogContent>
+                            {selectedShipment.wh_comment ? (
+                              <>
+                                <p>Este embarque ya tiene un comentario asignado:</p>
+                                <TextField
+                                  fullWidth
+                                  value={selectedShipment.wh_comment}
+                                  InputProps={{
+                                    readOnly: true,
+                                  }}
+                                />
+                              </>
+                            ) : (
+                              <TextField
+                                autoFocus
+                                margin="dense"
+                                label="Comentario"
+                                name="wh_comment"
+                                fullWidth
+                                value={whComment}
+                                onChange={(e) => setWhComment(e.target.value)}
+                              />
+                            )}
+                          </DialogContent>
+
+                          <DialogActions>
+                            <Button onClick={handleCloseWH}>Cerrar</Button>
+                            {!selectedShipment.wh_comment && (
+                              <Button
+                                onClick={() => handleSaveWhComment(selectedShipment.id)}
+                                color="primary"
+                                variant="contained"
+                              >
+                                Enviar
+                              </Button>
+                            )}
+                          </DialogActions>
+                        </>
+                      )}
+                    </Dialog>
+
+                    {/* Dialog comentario Admin*/}
+                    <Dialog open={openAdminCommentDialog} onClose={() => setOpenAdminCommentDialog(false)}>
+                      {selectedShipment && (
+                        <>
+                          <DialogTitle>
+                            ¿Quieres agregar un comentario para el embarque <strong>{selectedShipment.shipment_code}</strong>?
+                          </DialogTitle>
+
+                          <DialogContent>
+                            {selectedShipment.admin_comment ? (
+                              <>
+                                <p>Este embarque ya tiene un comentario asignado:</p>
+                                <TextField
+                                  fullWidth
+                                  value={selectedShipment.admin_comment}
+                                  InputProps={{
+                                    readOnly: true,
+                                  }}
+                                />
+                              </>
+                            ) : (
+                              <TextField
+                                autoFocus
+                                margin="dense"
+                                label="Comentario Admin"
+                                name="admin_comment"
+                                fullWidth
+                                value={adminComment}
+                                onChange={(e) => setAdminComment(e.target.value)}
+                              />
+                            )}
+                          </DialogContent>
+
+                          <DialogActions>
+                            <Button onClick={handleCloseAdmin}>Cerrar</Button>
+                            {!selectedShipment.admin_comment && (
+                              <Button
+                                onClick={() => handleSaveAdminComment(selectedShipment.id)}
+                                color="primary"
+                                variant="contained"
+                              >
+                                Enviar
+                              </Button>
+                            )}
+                          </DialogActions>
+                        </>
+                      )}
+                    </Dialog>
+
                 </TableCell>
                 <TableCell>
                   <Button 
@@ -550,10 +1200,19 @@ const ShipmentsList = ({ showAll }) => {
           {selectedShipment && (
             <Box>
               <Typography variant="subtitle1" gutterBottom>
+                <strong>Creado Por:</strong> { selectedShipment.created_by.first_name} {selectedShipment.created_by.last_name}
+              </Typography>
+              <Typography variant="subtitle1" gutterBottom>
                 <strong>Fecha requerida:</strong> {new Date(selectedShipment.requirement_date).toLocaleString('en-US', { timeZone: 'UTC'})}
               </Typography>
               <Typography variant="subtitle1" gutterBottom>
-                <strong>Comentario:</strong> {selectedShipment.comment || 'Ninguno'}
+                <strong>Comentario Planner:</strong> {selectedShipment.comment || 'Ninguno'}
+              </Typography>
+              <Typography variant="subtitle1" gutterBottom>
+                <strong>Comentario Almacén:</strong> {selectedShipment.wh_comment || 'Ninguno'}
+              </Typography>
+              <Typography variant="subtitle1" gutterBottom>
+                <strong>Comentario Issues vistos:</strong> {selectedShipment.admin_comment || 'Ninguno'}
               </Typography>
               <Typography variant="subtitle1" gutterBottom>
                 <strong>Estado:</strong> <Chip 
@@ -570,6 +1229,10 @@ const ShipmentsList = ({ showAll }) => {
                   } 
                 />
               </Typography>
+
+              <Typography variant="subtitle1" gutterBottom>
+                <strong>Albaran:</strong> {selectedShipment.albaran || 'Ninguno'}
+              </Typography>
               
               <Typography variant="h6" sx={{ mt: 2 }}>Requests asociados</Typography>
               <TableContainer component={Paper} sx={{ mt: 2 }}>
@@ -583,6 +1246,7 @@ const ShipmentsList = ({ showAll }) => {
                       <TableCell>Cantidad</TableCell>
                       <TableCell>Orden</TableCell>
                       <TableCell>Línea</TableCell>
+                      <TableCell>Comentario</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -595,13 +1259,62 @@ const ShipmentsList = ({ showAll }) => {
                         <TableCell>{request.qty}</TableCell>
                         <TableCell>{request.order}</TableCell>
                         <TableCell>{request.line}</TableCell>
+                        <TableCell>{request.comment_per_line}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </TableContainer>
-            </Box>
-          )}
+              
+              <Divider sx={{ mb: 4 }} />
+
+              {/* Tabla datos transporte */}
+              {selectedShipment.transport ? (
+              <>
+              <Typography variant="h6" gutterBottom sx={{ mb: 1 }}>
+                Datos de Transporte
+              </Typography>
+
+              <TableContainer component={Paper}>
+                <Table size="small">
+                  <TableBody>
+                    <TableRow>
+                      <TableCell><strong>Empresa</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.empresa || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>Conductor</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.conductor || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>Placas</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.placas || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>Engomado</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.engomado || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>CAAT</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.caat || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>RFC</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.rfc || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>TAG</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.tag || '-'}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
+            ) : (
+            <Typography color="textSecondary">No hay datos de transporte</Typography>
+            )}
+          </Box>
+            )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDetails}>Cerrar</Button>
@@ -619,6 +1332,18 @@ const ShipmentsList = ({ showAll }) => {
           showLastButton
         />
       </Stack>
+
+
+      {/* Snackbar para notificaciones */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

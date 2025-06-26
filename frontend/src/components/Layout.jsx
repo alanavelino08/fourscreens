@@ -27,7 +27,7 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ScreenSearchDesktopIcon from '@mui/icons-material/ScreenSearchDesktop';
-
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 import { useState } from 'react';
 import { getCurrentUser, logout } from '../services/auth';
@@ -79,6 +79,15 @@ const Layout = () => {
             { text: 'Crear usuarios', to: '/admin/users', icon: <PeopleIcon /> },
             { text: 'Solicitudes', to: '/admin/requests', icon: <AssignmentIcon /> },
             { text: 'Crear Partes', to: '/admin/parts', icon: <AddCardIcon />},
+            { text: 'Dashboard', to: '/admin/dashboard', icon: <AssessmentIcon /> },
+          ]
+        },
+        {
+          text: 'Incoming', 
+          icon: <ReceiptLongIcon />,
+          key: 'incomings',
+          subitems: [
+            { text: 'Crear solicitud', to: '/admin/users', icon: <PeopleIcon/>}
           ]
         }
       );
@@ -91,6 +100,7 @@ const Layout = () => {
           subitems: [
             { text: 'Mis Solicitudes', to: '/planner/requests', icon: <InboxIcon /> },
             { text: 'Nueva Solicitud', to: '/planner/request/new', icon: <AssignmentIcon /> },
+            { text: 'Crear Partes', to: '/planner/parts', icon: <AddCardIcon />},
           ]
         }
       );
@@ -219,13 +229,9 @@ const Layout = () => {
                     ))}
                   </Collapse>
                   <Divider />
-                   <ThemeToggle />
-                   {/* <RadioGroup row value={mode} onChange={(e) => setMode(e.target.value)}>
-                    <FormControlLabel value="light" control={<Radio />} label="Light" />
-                    <FormControlLabel value="dark" control={<Radio />} label="Dark" />
-                    <FormControlLabel value="system" control={<Radio />} label="System" />
-                  </RadioGroup> */}
+                   {/* <ThemeToggle /> */}
                 </Box>
+                
               );
             }
 
@@ -252,6 +258,7 @@ const Layout = () => {
             );
           })}
         </List>
+        <ThemeToggle />
       </Drawer>
 
       {/* Contenido principal */}

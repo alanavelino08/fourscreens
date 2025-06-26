@@ -16,7 +16,7 @@ import {
   TableRow,
   TableCell,
   Paper,
-  TextField
+  TextField, Divider
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
@@ -339,6 +339,9 @@ export default function ShipmentsDashboard() {
                     'No asignado'}
                 </Typography> */}
                 <Typography variant="subtitle1" gutterBottom>
+                  <strong>Creado por:</strong> {selectedShipment.created_by.first_name} {selectedShipment.created_by.last_name}
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom>
                   <strong>Estado:</strong> {' '}
                   <Chip 
                     label={selectedShipment.status} 
@@ -428,6 +431,9 @@ export default function ShipmentsDashboard() {
                         return formatHours(diffHours);
                     })()}
                 </Typography>
+                <Typography variant="subtitle1" gutterBottom>
+                  <strong>Albaran:</strong> {selectedShipment.albaran || 'Ninguno'}
+                </Typography>
               </Box>
 
               {/* Tabla de requests */}
@@ -445,6 +451,7 @@ export default function ShipmentsDashboard() {
                       <TableCell><strong>Cantidad</strong></TableCell>
                       <TableCell><strong>Orden</strong></TableCell>
                       <TableCell><strong>Línea</strong></TableCell>
+                      <TableCell><strong>Comentario</strong></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -457,9 +464,57 @@ export default function ShipmentsDashboard() {
                         <TableCell>{request.qty || '-'}</TableCell>
                         <TableCell>{request.order || '-'}</TableCell>
                         <TableCell>{request.line || '-'}</TableCell>
+                        <TableCell>{request.comment_per_line || 'N/A'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Divider sx={{ mb: 4 }} />
+              {/* Tabla datos transporte */}
+              <TableContainer component={Paper}>
+                <Table size="small">
+
+                {selectedShipment.transport ? (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="h6" gutterBottom>Datos de Transporte</Typography>
+                <Table size="small">
+                  <TableBody>
+                    <TableRow>
+                      <TableCell><strong>Empresa</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.empresa || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>Conductor</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.conductor || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>Placas</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.placas || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>Engomado</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.engomado || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>CAAT</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.caat || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>RFC</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.rfc || '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>TAG</strong></TableCell>
+                      <TableCell>{selectedShipment.transport.tag || '-'}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </Box>
+) : (
+  <Typography color="textSecondary">No hay datos de transporte</Typography>
+)}
                 </Table>
               </TableContainer>
             </Box>

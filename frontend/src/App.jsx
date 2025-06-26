@@ -37,6 +37,12 @@ function App() {
           </ProtectedRoute>
         } />
 
+        <Route path="/admin/dashboard" element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <Datadashboard showAll={true} />
+          </ProtectedRoute>
+        } />
+
         {/* Planner Routes */}
         <Route path="/planner/requests" element={
           <ProtectedRoute allowedRoles={['PLANNER']}>
@@ -47,6 +53,12 @@ function App() {
         <Route path="/planner/request/new" element={
           <ProtectedRoute allowedRoles={['PLANNER']}>
             <CreateRequest />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/planner/parts" element={
+          <ProtectedRoute allowedRoles={['PLANNER']}>
+            <CreatePart />
           </ProtectedRoute>
         } />
 

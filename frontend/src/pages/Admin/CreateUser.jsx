@@ -54,7 +54,7 @@ const CreateUser = () => {
     count: 0,
     currentPage: 0,
     totalPages: 1,
-    rowsPerPage: 10
+    rowsPerPage: 5
   });
   const classes = useStyles();
   
@@ -124,6 +124,10 @@ const CreateUser = () => {
   };
 
   const fetchUsers = async (page = 0) => {
+    const total = pagination.count;
+    const totalPages = Math.ceil(total / pagination.rowsPerPage);
+
+    if (page >= totalPages && total > 0) return;
     try {
       setLoading(true);
       const response = await api.get(`/users/?page=${page + 1}&page_size=${pagination.rowsPerPage}`);

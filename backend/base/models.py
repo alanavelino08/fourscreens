@@ -52,6 +52,7 @@ class Request(models.Model):
     warehouse = models.CharField(max_length=100)
     part_number = models.ForeignKey(PartNumber, on_delete=models.PROTECT, related_name='requests', null=True)
     shipment = models.ForeignKey('Shipment', on_delete=models.SET_NULL, null=True, blank=True, related_name='requests')
+    comment_per_line = models.TextField(blank=True, null=True)
 
     @property
     def ikor_number(self):
@@ -72,6 +73,18 @@ class Request(models.Model):
     def __str__(self):
         ikor = self.part_number.ikor_number if self.part_number else "No Part Number"
         return f"Request #{self.id} - {ikor}"
+    
+class Transport(models.Model):
+    placas = models.CharField(max_length=20, blank=True, null=True)
+    engomado = models.CharField(max_length=20, blank=True, null=True)
+    caat = models.CharField(max_length=20, blank=True, null=True)
+    tag = models.CharField(max_length=20, blank=True, null=True)
+    rfc = models.CharField(max_length=20, blank=True, null=True)
+    empresa = models.CharField(max_length=100, blank=True, null=True)
+    conductor = models.CharField(max_length=100, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.empresa} - {self.placas} - {self.conductor}"
 
 class Shipment(models.Model):
 
@@ -106,6 +119,14 @@ class Shipment(models.Model):
     cancelled_at = models.DateTimeField( blank=True, null=True)
 
     comment = models.TextField(blank=True, null=True)
+
+    albaran = models.TextField(blank=True, null=True)
+
+    transport = models.ForeignKey(Transport, on_delete=models.SET_NULL, blank=True, null=True, related_name='shipments', verbose_name='Transporte')
+
+    wh_comment = models.TextField(blank=True, null=True)
+
+    admin_comment = models.TextField(blank=True, null=True)
 
     def save(self, *args, **kwargs):
 

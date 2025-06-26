@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Request, PartNumber, Shipment
+from .models import User, Request, PartNumber, Shipment, Transport
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
 
@@ -97,7 +97,7 @@ class RequestSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order', 'qty', 'ref_client', 'line', 'warehouse',
             'part_number', 'shipment', 'ikor_number', 'customer_pn',
-            'nickname', 'project'
+            'nickname', 'project', 'comment_per_line'
         ]
         read_only_fields = ['customer_pn', 'nickname', 'project']
         extra_kwargs = {
@@ -110,6 +110,11 @@ class RequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("No existe un número de parte con este código")
         return value
     
+class TransportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transport
+        fields = ['id', 'placas', 'engomado', 'caat', 'tag', 'rfc', 'empresa', 'conductor']
+    
     
 class ShipmentSerializer(serializers.ModelSerializer):
     #created_by = SimpleUserSerializer(read_only=True)
@@ -117,6 +122,8 @@ class ShipmentSerializer(serializers.ModelSerializer):
     taked_by = UserSerializer(read_only=True)
     give_progress_by = UserSerializer(read_only=True)
     requests = RequestSerializer(many=True, required=False)
+    transport = TransportSerializer(read_only=True)
+    created_by = UserSerializer(read_only=True)
     
     class Meta:
         model = Shipment
