@@ -1,4 +1,4 @@
-import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import {
   AppBar,
   Toolbar,
@@ -14,25 +14,25 @@ import {
   Divider,
   Tooltip,
   Collapse,
-} from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
-import LogoutIcon from '@mui/icons-material/Logout';
-import PeopleIcon from '@mui/icons-material/People';
-import InboxIcon from '@mui/icons-material/Inbox';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import AddCardIcon from '@mui/icons-material/AddCard';
-import ExpandLess from '@mui/icons-material/ExpandLess';
-import ExpandMore from '@mui/icons-material/ExpandMore';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import ScreenSearchDesktopIcon from '@mui/icons-material/ScreenSearchDesktop';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+} from "@mui/material";
+import MenuIcon from "@mui/icons-material/Menu";
+import LogoutIcon from "@mui/icons-material/Logout";
+import PeopleIcon from "@mui/icons-material/People";
+import InboxIcon from "@mui/icons-material/Inbox";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import AssignmentIcon from "@mui/icons-material/Assignment";
+import AddCardIcon from "@mui/icons-material/AddCard";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import AssessmentIcon from "@mui/icons-material/Assessment";
+import ScreenSearchDesktopIcon from "@mui/icons-material/ScreenSearchDesktop";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 
-import { useState } from 'react';
-import { getCurrentUser, logout } from '../services/auth';
-import ThemeToggle from './ThemeToggle';
-import {useColorScheme } from '@mui/material';
+import { useState } from "react";
+import { getCurrentUser, logout } from "../services/auth";
+import ThemeToggle from "./ThemeToggle";
+import { useColorScheme } from "@mui/material";
 
 const drawerWidth = 240;
 
@@ -49,15 +49,15 @@ const Layout = () => {
   };
 
   const handleToggleMenu = (menu) => {
-    setExpandedMenus(prev => ({
+    setExpandedMenus((prev) => ({
       ...prev,
-      [menu]: !prev[menu]
+      [menu]: !prev[menu],
     }));
   };
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   const isActive = (path) => {
@@ -69,64 +69,113 @@ const Layout = () => {
 
     const common = [];
 
-    if (user.role === 'ADMIN') {
+    if (user.role === "ADMIN") {
       common.push(
-        { 
-          text: 'Embarques', 
-          icon: <LocalShippingIcon />, 
-          key: 'shipments',
+        {
+          text: "Embarques",
+          icon: <LocalShippingIcon />,
+          key: "shipments",
           subitems: [
-            { text: 'Crear usuarios', to: '/admin/users', icon: <PeopleIcon /> },
-            { text: 'Solicitudes', to: '/admin/requests', icon: <AssignmentIcon /> },
-            { text: 'Crear Partes', to: '/admin/parts', icon: <AddCardIcon />},
-            { text: 'Dashboard', to: '/admin/dashboard', icon: <AssessmentIcon /> },
-          ]
+            {
+              text: "Crear usuarios",
+              to: "/admin/users",
+              icon: <PeopleIcon />,
+            },
+            {
+              text: "Solicitudes",
+              to: "/admin/requests",
+              icon: <AssignmentIcon />,
+            },
+            { text: "Crear Partes", to: "/admin/parts", icon: <AddCardIcon /> },
+            {
+              text: "Dashboard",
+              to: "/admin/dashboard",
+              icon: <AssessmentIcon />,
+            },
+          ],
         },
         {
-          text: 'Incoming', 
+          text: "Incoming",
           icon: <ReceiptLongIcon />,
-          key: 'incomings',
+          key: "incomings",
           subitems: [
-            { text: 'Crear solicitud', to: '/admin/users', icon: <PeopleIcon/>}
-          ]
+            {
+              text: "Crear solicitud",
+              to: "/quality/mapping",
+              icon: <PeopleIcon />,
+            },
+          ],
         }
       );
-    } else if (user.role === 'PLANNER') {
-      common.push(
-        { 
-          text: 'Embarques', 
-          icon: <LocalShippingIcon />, 
-          key: 'shipments',
-          subitems: [
-            { text: 'Mis Solicitudes', to: '/planner/requests', icon: <InboxIcon /> },
-            { text: 'Nueva Solicitud', to: '/planner/request/new', icon: <AssignmentIcon /> },
-            { text: 'Crear Partes', to: '/planner/parts', icon: <AddCardIcon />},
-          ]
-        }
-      );
+    } else if (user.role === "PLANNER") {
+      common.push({
+        text: "Embarques",
+        icon: <LocalShippingIcon />,
+        key: "shipments",
+        subitems: [
+          {
+            text: "Mis Solicitudes",
+            to: "/planner/requests",
+            icon: <InboxIcon />,
+          },
+          {
+            text: "Nueva Solicitud",
+            to: "/planner/request/new",
+            icon: <AssignmentIcon />,
+          },
+          { text: "Crear Partes", to: "/planner/parts", icon: <AddCardIcon /> },
+        ],
+      });
+    } else if (user.role === "WAREHOUSE") {
+      // WAREHOUSE
+      common.push({
+        text: "Embarques",
+        icon: <LocalShippingIcon />,
+        key: "shipments",
+        subitems: [
+          {
+            text: "Solicitudes",
+            to: "/warehouse/requests",
+            icon: <AssignmentIcon />,
+          },
+          {
+            text: "Dashboard",
+            to: "/warehouse/dashboard",
+            icon: <AssessmentIcon />,
+          },
+          {
+            text: "Busqueda",
+            to: "/warehouse/allshipmentsdashboard",
+            icon: <ScreenSearchDesktopIcon />,
+          },
+        ],
+      });
     } else {
       // WAREHOUSE
-      common.push(
-        { 
-          text: 'Embarques', 
-          icon: <LocalShippingIcon />, 
-          key: 'shipments',
-          subitems: [
-            { text: 'Solicitudes', to: '/warehouse/requests', icon: <AssignmentIcon /> },
-            { text: 'Dashboard', to: '/warehouse/dashboard', icon: <AssessmentIcon /> },
-            { text: 'Busqueda', to: '/warehouse/allshipmentsdashboard', icon: <ScreenSearchDesktopIcon />},
-          ]
-        }
-      );
+      common.push({
+        text: "Incomming",
+        icon: <ReceiptLongIcon />,
+        key: "shipments",
+        subitems: [
+          {
+            text: "Recibo",
+            to: "/quality/mapping",
+            icon: <AssignmentIcon />,
+          },
+        ],
+      });
     }
 
     return common;
   };
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: "flex" }}>
       {/* AppBar superior */}
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+      <AppBar
+        position="fixed"
+        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}
+      >
         <Toolbar>
           <IconButton
             color="inherit"
@@ -141,7 +190,9 @@ const Layout = () => {
           </Typography>
           {user && (
             <>
-              <Typography sx={{ mr: 2 }}>{user.fullName} ({user.role})</Typography>
+              <Typography sx={{ mr: 2 }}>
+                {user.fullName} ({user.role})
+              </Typography>
               <Tooltip title="Cerrar sesión">
                 <IconButton color="inherit" onClick={handleLogout}>
                   <LogoutIcon />
@@ -160,9 +211,9 @@ const Layout = () => {
           flexShrink: 0,
           [`& .MuiDrawer-paper`]: {
             width: openDrawer ? drawerWidth : 60,
-            boxSizing: 'border-box',
-            transition: 'width 0.3s',
-            overflowX: 'hidden',
+            boxSizing: "border-box",
+            transition: "width 0.3s",
+            overflowX: "hidden",
           },
         }}
       >
@@ -171,18 +222,22 @@ const Layout = () => {
           {getMenuItems().map((item) => {
             if (item.subitems) {
               const isMenuExpanded = expandedMenus[item.key] ?? true;
-              const hasActiveChild = item.subitems.some(sub => isActive(sub.to));
+              const hasActiveChild = item.subitems.some((sub) =>
+                isActive(sub.to)
+              );
 
               return (
                 <Box key={item.text}>
                   <ListItem disablePadding>
-                    <ListItemButton 
+                    <ListItemButton
                       onClick={() => handleToggleMenu(item.key)}
                       sx={{
-                        backgroundColor: hasActiveChild ? 'rgba(25, 118, 210, 0.08)' : 'inherit',
-                        '&:hover': {
-                          backgroundColor: 'rgba(25, 118, 210, 0.12)',
-                        }
+                        backgroundColor: hasActiveChild
+                          ? "rgba(25, 118, 210, 0.08)"
+                          : "inherit",
+                        "&:hover": {
+                          backgroundColor: "rgba(25, 118, 210, 0.12)",
+                        },
                       }}
                     >
                       {item.icon}
@@ -196,30 +251,36 @@ const Layout = () => {
                   </ListItem>
                   <Collapse in={isMenuExpanded} timeout="auto" unmountOnExit>
                     {item.subitems.map((sub) => (
-                      <ListItem 
-                        key={sub.text} 
-                        disablePadding 
+                      <ListItem
+                        key={sub.text}
+                        disablePadding
                         sx={{ pl: openDrawer ? 4 : 0 }}
                       >
-                        <ListItemButton 
-                          component={Link} 
+                        <ListItemButton
+                          component={Link}
                           to={sub.to}
                           selected={isActive(sub.to)}
                           sx={{
-                            '&.Mui-selected': {
-                              backgroundColor: 'primary.main',
-                              color: 'primary.contrastText',
-                              '&:hover': {
-                                backgroundColor: 'primary.dark',
-                              }
-                            }
+                            "&.Mui-selected": {
+                              backgroundColor: "primary.main",
+                              color: "primary.contrastText",
+                              "&:hover": {
+                                backgroundColor: "primary.dark",
+                              },
+                            },
                           }}
                         >
                           {openDrawer ? (
                             <ListItemText primary={sub.text} />
                           ) : (
                             <Tooltip title={sub.text} placement="right">
-                              <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                              <Box
+                                sx={{
+                                  width: "100%",
+                                  display: "flex",
+                                  justifyContent: "center",
+                                }}
+                              >
                                 {sub.icon}
                               </Box>
                             </Tooltip>
@@ -229,30 +290,31 @@ const Layout = () => {
                     ))}
                   </Collapse>
                   <Divider />
-                   {/* <ThemeToggle /> */}
+                  {/* <ThemeToggle /> */}
                 </Box>
-                
               );
             }
 
             return (
               <ListItem key={item.text} disablePadding>
-                <ListItemButton 
-                  component={Link} 
+                <ListItemButton
+                  component={Link}
                   to={item.to}
                   selected={isActive(item.to)}
                   sx={{
-                    '&.Mui-selected': {
-                      backgroundColor: 'primary.main',
-                      color: 'primary.contrastText',
-                      '&:hover': {
-                        backgroundColor: 'primary.dark',
-                      }
-                    }
+                    "&.Mui-selected": {
+                      backgroundColor: "primary.main",
+                      color: "primary.contrastText",
+                      "&:hover": {
+                        backgroundColor: "primary.dark",
+                      },
+                    },
                   }}
                 >
                   {item.icon}
-                  {openDrawer && <ListItemText sx={{ ml: 2 }} primary={item.text} />}
+                  {openDrawer && (
+                    <ListItemText sx={{ ml: 2 }} primary={item.text} />
+                  )}
                 </ListItemButton>
               </ListItem>
             );
