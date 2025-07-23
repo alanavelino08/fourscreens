@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard, get_last_shipment, TransportViewSet, get_shipments_today_and_tomorrow, reset_password_direct, PartNumberSearch
+from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard, get_last_shipment, TransportViewSet, get_shipments_today_and_tomorrow, reset_password_direct, PartNumberSearch, ExcelUploadView, scan_pallet, location_status, delete_pallet, pallet_history, update_pallet_quantity
 from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
@@ -32,4 +32,10 @@ urlpatterns = [
     path('partnumber/filter/', PartNumberSearch.as_view(), name='allshipments-dashboard'),
     #path('shipments/<int:shipment_id>/update_wh_comment/', ShipmentViewSet.as_view({'patch': 'update_wh_comment'}), name='update_wh_comment'),
     #path('shipments/<int:shipment_id>/admin_comment/', views.update_admin_comment, name='update_admin_comment'),
+    path('upload-excel/', ExcelUploadView.as_view(), name='upload-excel'),
+    path('scan-pallet/', scan_pallet, name='scan_pallet'),
+    path('location-status/', location_status, name='location_status'),
+    path("pallets/<int:pallet_id>/", delete_pallet, name="delete_pallet"),
+    path("pallet-history/", pallet_history, name="pallet_history"),
+    path("update-pallet/<int:pk>/", update_pallet_quantity),
 ]

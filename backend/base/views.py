@@ -1,22 +1,27 @@
 from rest_framework import viewsets, status, permissions, generics, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, permission_classes
-from .models import User, Request, PartNumber, Shipment, Transport
-from .serializers import UserSerializer, RequestSerializer, ShipmentSerializer, PartNumberSerializer, TransportSerializer
+from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, PalletHistory
+from .serializers import UserSerializer, RequestSerializer, ShipmentSerializer, PartNumberSerializer, TransportSerializer, LocationSerializer, PalletSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.utils import timezone
 from rest_framework.pagination import PageNumberPagination
-#from django.http import JsonResponse
+from django.http import JsonResponse
 from rest_framework.generics import ListAPIView
 from datetime import datetime
 from django.db import models
-from django.db.models import Count
+from django.db.models import Count, Sum, Max
 from .pagination import CustomPageNumberPagination
 from django.core.mail import EmailMessage
 from datetime import timedelta
 from django.contrib.auth import get_user_model
+import pandas as pd
+from rest_framework.parsers import MultiPartParser
+from rest_framework.views import APIView
+import re
+
 
 class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -484,3 +489,215 @@ def reset_password_direct(request):
         return Response({'detail': 'Contraseña actualizada correctamente.'})
     except User.DoesNotExist:
         return Response({'detail': 'Usuario no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+    
+#FINISH GOOD
+def process_scan(scan_str, user, location_str):
+    scan_str = scan_str.strip()
+    location_str = location_str.strip()
+
+    if '(' in scan_str:
+        header = scan_str.split('(')[0].strip()
+        match = re.search(r'\(([^)]+)', scan_str)
+        if not match:
+            raise ValueError("Cadena con paréntesis inválida")
+        data = match.group(1).split('"')
+        if len(data) < 8:
+            raise ValueError("Formato de etiqueta no reconocido (con paréntesis)")
+        part_number = header + "*" + data[0]
+        quantity = int(data[1])
+        project = data[2]
+        code = data[4]
+        batch = data[5]
+        box_id = data[6]
+        mfg_part_number = data[7]
+    else:
+        data = scan_str.split('"')
+        if len(data) < 8:
+            raise ValueError("Formato de etiqueta no reconocido (sin paréntesis)")
+        part_number = data[0]
+        quantity = int(data[1])
+        project = data[2]
+        code = data[4]
+        batch = data[5]
+        box_id = data[6]
+        mfg_part_number = data[7]
+
+    # Validamos que no sea repetido
+    if PalletScan.objects.filter(box_id=box_id).exists():
+        raise ValueError(f"El box_id '{box_id}' ya fue registrado anteriormente.")
+
+    # código de location
+    try:
+        code_location = location_str.strip()
+        location = Location.objects.get(code_location=code_location)
+        print("Ubicación escaneada:", code_location)
+    except Location.DoesNotExist:
+        raise ValueError(f"La ubicación '{location_str}' no existe")
+
+    # No excede de cantidad 72 o 4 pallets
+    pallet_count = PalletScan.objects.filter(location=location).count()
+    total_quantity = PalletScan.objects.filter(location=location).aggregate(total=Sum('quantity'))['total'] or 0
+
+    if pallet_count >= 4 or (total_quantity + quantity) > 72:
+        raise ValueError("La ubicación ya está ocupada o supera el límite permitido")
+
+    # Creamos Pallet - Material Nuevo
+    pallet = PalletScan.objects.create(
+        part_number=part_number,
+        quantity=quantity,
+        project=project,
+        date=datetime.strptime(code, "%Y%m%d").date(),
+        batch=batch,
+        box_id=box_id,
+        mfg_part_number=mfg_part_number,
+        user=user,
+        location=location
+    )
+
+    return {
+        "pallet": {
+            "part_number": pallet.part_number,
+            "quantity": pallet.quantity,
+            "project": pallet.project,
+            "code": pallet.code,
+            "date": pallet.date,
+            "batch": pallet.batch,
+            "box_id": pallet.box_id,
+            "mfg_part_number": pallet.mfg_part_number,
+        },
+        "location": {
+            "rack": location.rack,
+            "code_location": location.code_location,
+            "pallet_count": pallet_count + 1,
+            "total_quantity": total_quantity + quantity
+        }
+    }
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def scan_pallet(request):
+    scan_data = request.data.get("scan")
+    location_str = request.data.get("location")
+
+    if not location_str:
+        return Response({"error": "Debes escanear la ubicación."}, status=400)
+
+    try:
+        result = process_scan(scan_data, request.user, location_str)
+        return Response({
+            "message": "Pallet registrado correctamente",
+            "pallet": result["pallet"],
+            "location": result["location"]
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def location_status(request):
+    locations = Location.objects.all()
+    data = []
+
+    for loc in locations:
+        pallets = PalletScan.objects.filter(location=loc).select_related('user')
+        serialized_pallets = PalletSerializer(pallets, many=True).data
+
+        data.append({
+            "rack": loc.rack,
+            "code_location": loc.code_location,
+            "pallet_count": pallets.count(),
+            "total_quantity": sum(p.quantity for p in pallets),
+            "pallets": serialized_pallets,
+        })
+
+    return Response(data)
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_pallet(request, pallet_id):
+    try:
+        pallet = PalletScan.objects.get(id=pallet_id)
+        
+        PalletHistory.objects.create(
+            part_number=pallet.part_number,
+            quantity=pallet.quantity,
+            project=pallet.project,
+            code=pallet.code,
+            date=pallet.date,
+            batch=pallet.batch,
+            box_id=pallet.box_id,
+            mfg_part_number=pallet.mfg_part_number,
+            location=pallet.location,
+            timestamp_in=pallet.timestamp,
+            user_in=pallet.user,
+            user_out=request.user
+        )
+
+        pallet.delete()
+        return Response({"message": "Pallet eliminado y archivado en historial."})
+    except PalletScan.DoesNotExist:
+        return Response({"error": "Pallet no encontrado"}, status=404)
+    
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_pallet_quantity(request, pk):
+    try:
+        pallet = PalletScan.objects.get(pk=pk)
+        new_qty = request.data.get("quantity")
+        if new_qty is None or int(new_qty) < 0:
+            return Response({"error": "Cantidad inválida"}, status=400)
+
+        pallet.quantity = int(new_qty)
+        pallet.save()
+        return Response({"message": "Cantidad actualizada correctamente"})
+    except pallet.DoesNotExist:
+        return Response({"error": "Pallet no encontrado"}, status=404)
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pallet_history(request):
+    part = request.query_params.get("part")
+    start = request.query_params.get("start")
+    end = request.query_params.get("end")
+
+    history = PalletHistory.objects.all()
+
+    if part:
+        history = history.filter(part_number__icontains=part)
+    
+    if start:
+        history = history.filter(timestamp_out__date__gte=start)
+    if end:
+        history = history.filter(timestamp_out__date__lte=end)
+
+    serialized = [{
+        "part_number": p.part_number,
+        "quantity": p.quantity,
+        "timestamp_in": p.timestamp_in,
+        "timestamp_out": p.timestamp_out,
+        "box_id": p.box_id,
+        "location": p.location.code_location if p.location else "N/A",
+        "user_in": f"{p.user_in.first_name} {p.user_in.last_name}" if p.user_in else "N/A",
+        "user_out": f"{p.user_out.first_name} {p.user_out.last_name}" if p.user_out else "N/A",
+    } for p in history]
+
+    return Response(serialized)
+
+    
+#INCOMING    
+class ExcelUploadView(APIView):
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, *args, **kwargs):
+        file = request.FILES.get('file')
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            df = pd.read_excel(file, sheet_name="Guia")
+            df = df.fillna("")
+            df.columns = df.columns.str.strip()
+            data = df.head(10).to_dict(orient="records")
+            return Response({"data": data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

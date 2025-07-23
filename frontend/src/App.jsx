@@ -11,6 +11,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Datadashboard from "./pages/Warehouse/Datadashboard";
 import Alldatadashboard from "./pages/Warehouse/Alldatadashboard";
 import MappingMaterial from "./pages/Quality/Mapping";
+import LocateMaterial from "./pages/Warehouse/Locatematerial";
+import MaterialHistory from "./pages/Warehouse/Materialhistory";
 
 function App() {
   return (
@@ -107,6 +109,24 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["WAREHOUSE"]}>
               <Alldatadashboard showAll={true} warehouseView={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/warehouse/locatematerial"
+          element={
+            <ProtectedRoute allowedRoles={["WAREHOUSE"]}>
+              <LocateMaterial showAll={true} warehouseView={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/warehouse/materialhistory"
+          element={
+            <ProtectedRoute allowedRoles={["WAREHOUSE"]}>
+              <MaterialHistory showAll={true} warehouseView={true} />
             </ProtectedRoute>
           }
         />

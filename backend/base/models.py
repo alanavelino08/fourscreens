@@ -8,6 +8,7 @@ from django.db import transaction, IntegrityError
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 
+#SHIPMENT AREA
 class User(AbstractUser):
     ROLE_CHOICES = (
         ('ADMIN', 'Admin'),
@@ -207,3 +208,49 @@ class Shipment(models.Model):
 
     def __str__(self):
         return f"{self.shipment_code} - {self.id}"
+
+#FINISH GOOD - Shipment area
+class Location(models.Model):
+    rack = models.CharField(max_length=20)
+    code_location = models.CharField(max_length=20)
+    #is_occupied = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return f"{self.rack} - {self.code_location}"
+    
+class PalletScan(models.Model):
+    part_number = models.CharField(max_length=100)
+    quantity = models.IntegerField()
+    project = models.CharField(max_length=50)
+    code = models.CharField(max_length=50)
+    date = models.DateField()
+    batch = models.CharField(max_length=50)
+    box_id = models.CharField(max_length=50)
+    mfg_part_number = models.CharField(max_length=50)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True)
+    
+    def __str__(self):
+        return f"{self.part_number} - {self.location}"
+    
+class PalletHistory(models.Model):
+    part_number = models.CharField(max_length=100)
+    quantity = models.IntegerField()
+    project = models.CharField(max_length=50)
+    code = models.CharField(max_length=50)
+    date = models.DateField()
+    batch = models.CharField(max_length=50)
+    box_id = models.CharField(max_length=50)
+    mfg_part_number = models.CharField(max_length=50)
+    
+    location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True)
+    
+    timestamp_in = models.DateTimeField()
+    timestamp_out = models.DateTimeField(auto_now_add=True)
+    
+    user_in = models.ForeignKey(User, related_name='registered_pallets', on_delete=models.SET_NULL, null=True)
+    user_out = models.ForeignKey(User, related_name='removed_pallets', on_delete=models.SET_NULL, null=True)
+
+    def __str__(self):
+        return f"{self.part_number} ({self.box_id}) - Historial"

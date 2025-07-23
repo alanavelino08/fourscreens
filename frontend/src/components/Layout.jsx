@@ -28,6 +28,9 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import ScreenSearchDesktopIcon from "@mui/icons-material/ScreenSearchDesktop";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import QrCodeIcon from "@mui/icons-material/QrCode";
+import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 
 import { useState } from "react";
 import { getCurrentUser, logout } from "../services/auth";
@@ -128,28 +131,47 @@ const Layout = () => {
       });
     } else if (user.role === "WAREHOUSE") {
       // WAREHOUSE
-      common.push({
-        text: "Embarques",
-        icon: <LocalShippingIcon />,
-        key: "shipments",
-        subitems: [
-          {
-            text: "Solicitudes",
-            to: "/warehouse/requests",
-            icon: <AssignmentIcon />,
-          },
-          {
-            text: "Dashboard",
-            to: "/warehouse/dashboard",
-            icon: <AssessmentIcon />,
-          },
-          {
-            text: "Busqueda",
-            to: "/warehouse/allshipmentsdashboard",
-            icon: <ScreenSearchDesktopIcon />,
-          },
-        ],
-      });
+      common.push(
+        {
+          text: "Embarques",
+          icon: <LocalShippingIcon />,
+          key: "shipments",
+          subitems: [
+            {
+              text: "Solicitudes",
+              to: "/warehouse/requests",
+              icon: <AssignmentIcon />,
+            },
+            {
+              text: "Dashboard",
+              to: "/warehouse/dashboard",
+              icon: <AssessmentIcon />,
+            },
+            {
+              text: "Busqueda",
+              to: "/warehouse/allshipmentsdashboard",
+              icon: <ScreenSearchDesktopIcon />,
+            },
+          ],
+        },
+        {
+          text: "Producto Terminado",
+          icon: <InventoryIcon />,
+          key: "incomings",
+          subitems: [
+            {
+              text: "Ubicar Material",
+              to: "/warehouse/locatematerial",
+              icon: <QrCodeIcon />,
+            },
+            {
+              text: "Historial de salidas",
+              to: "/warehouse/materialhistory",
+              icon: <HistoryEduIcon />,
+            },
+          ],
+        }
+      );
     } else {
       // WAREHOUSE
       common.push({

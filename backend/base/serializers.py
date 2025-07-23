@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Request, PartNumber, Shipment, Transport
+from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
 
@@ -153,3 +153,14 @@ class ShipmentSerializer(serializers.ModelSerializer):
     #         if request and not self.instance.taked_by:
     #             data['taked_by'] = request.user
     #     return data
+
+class LocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Location
+        fields = '__all__'
+        
+class PalletSerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+    class Meta:
+        model = PalletScan
+        fields = '__all__'
