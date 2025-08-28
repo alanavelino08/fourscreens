@@ -13,6 +13,8 @@ import Alldatadashboard from "./pages/Warehouse/Alldatadashboard";
 import MappingMaterial from "./pages/Quality/Mapping";
 import LocateMaterial from "./pages/Warehouse/Locatematerial";
 import MaterialHistory from "./pages/Warehouse/Materialhistory";
+import WithdrawalMaterial from "./pages/Warehouse/Withdrawal";
+import HotlistRequest from "./pages/Buyer/Hotlist";
 
 function App() {
   return (
@@ -53,6 +55,15 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["ADMIN"]}>
               <Datadashboard showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/withdrawalmaterial"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN"]}>
+              <WithdrawalMaterial showAll={true} />
             </ProtectedRoute>
           }
         />
@@ -131,12 +142,40 @@ function App() {
           }
         />
 
+        <Route
+          path="/warehouse/mapping"
+          element={
+            <ProtectedRoute allowedRoles={["WAREHOUSE"]}>
+              <MappingMaterial showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/warehouse/withdrawalmaterial"
+          element={
+            <ProtectedRoute allowedRoles={["WAREHOUSE"]}>
+              <WithdrawalMaterial showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Quality Routes */}
         <Route
           path="/quality/mapping"
           element={
             <ProtectedRoute allowedRoles={["QUALITY"]}>
               <MappingMaterial showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Buyer Routes */}
+        <Route
+          path="/buyer/hotlist"
+          element={
+            <ProtectedRoute allowedRoles={["BUYER"]}>
+              <HotlistRequest showAll={true} />
             </ProtectedRoute>
           }
         />

@@ -233,7 +233,7 @@ const ShipmentsList = ({ showAll }) => {
           Array.isArray(response.data.results)
             ? response.data.results
             : response.data
-        ); // Asume que el backend regresa una lista sin 'results'
+        );
         setPagination({ count: 0, currentPage: 1, totalPages: 1 });
       } else {
         setShipments(response.data.results);

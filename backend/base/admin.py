@@ -8,7 +8,7 @@
 # admin.site.register(Shipment)
 
 from django.contrib import admin
-from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, PalletHistory
+from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, PalletHistory, IncomingPart, SupplierInfo, Cone, MaterialEntry, ProductionOrder, MaterialWithdrawal
 from django.utils.html import format_html
 
 @admin.register(Shipment)
@@ -94,3 +94,14 @@ admin.site.register(Transport)
 admin.site.register(Location)
 admin.site.register(PalletScan)
 admin.site.register(PalletHistory)
+# admin.site.register(Client)
+# admin.site.register(Family)
+# admin.site.register(TypeIncoming)
+# admin.site.register(Supplier)
+# admin.site.register(IncommingPartNumber)
+admin.site.register(IncomingPart)
+admin.site.register(SupplierInfo)
+admin.site.register(Cone)
+admin.site.register(MaterialEntry)
+admin.site.register(ProductionOrder)
+admin.site.register(MaterialWithdrawal)

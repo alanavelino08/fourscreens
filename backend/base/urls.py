@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard, get_last_shipment, TransportViewSet, get_shipments_today_and_tomorrow, reset_password_direct, PartNumberSearch, ExcelUploadView, scan_pallet, location_status, delete_pallet, pallet_history, update_pallet_quantity
+from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard, get_last_shipment, TransportViewSet, get_shipments_today_and_tomorrow, reset_password_direct, PartNumberSearch, ExcelUploadView, scan_pallet, location_status, delete_pallet, pallet_history, update_pallet_quantity, cargar_partes, MatchPedidoView, SaveMaterialEntryView, MaterialEntryListView, AdvanceMaterialEntryView, AdvanceYellowConeView, StepsListView, SaveMaterialWithdrawalView, MaterialWithdrawalSummaryView, ValidarDescargasView, FinalizeGreenConeView, BuyerMaterialRequestView, BuyerValidatePartView
 from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
@@ -38,4 +38,18 @@ urlpatterns = [
     path("pallets/<int:pallet_id>/", delete_pallet, name="delete_pallet"),
     path("pallet-history/", pallet_history, name="pallet_history"),
     path("update-pallet/<int:pk>/", update_pallet_quantity),
+    #path('get-data-excel/', ExcelDataView.as_view(), name="get-data-excel"),
+    path("cargar-partes/", cargar_partes, name="cargar_partes"),
+    path('match-pedido/', MatchPedidoView.as_view(), name="match-data-doc"),
+    path('save-material-entries/', SaveMaterialEntryView.as_view(), name='material-entry'),
+    path('all-material-entries/', MaterialEntryListView.as_view()),
+    path('material-entry/<int:entry_id>/advance/', AdvanceMaterialEntryView.as_view()),
+    path('material-entry/<int:entry_id>/advance-yellow/', AdvanceYellowConeView.as_view()),
+    path("entries/<int:entry_id>/finalize-green/", FinalizeGreenConeView.as_view(), name="finalize-green-cone"),
+    path('steps/', StepsListView.as_view(), name='steps-list'),
+    path('save-material-withdrawal/', SaveMaterialWithdrawalView.as_view()),
+    path('material-withdrawals-summary/', MaterialWithdrawalSummaryView.as_view()),
+    path("validar-descargas/", ValidarDescargasView.as_view(), name="validar-descargas"),
+    path("buyer-material-request/", BuyerMaterialRequestView.as_view(), name="hotlist-request"),
+    path('buyer-validate-part/<str:cod_art>/', BuyerValidatePartView.as_view(), name='buyer-validate-part'),
 ]

@@ -59,6 +59,9 @@ const Login = () => {
         case "WAREHOUSE":
           navigate("/warehouse/requests");
           break;
+        case "BUYER":
+          navigate("/buyer/hotlist");
+          break;
         case "QUALITY":
           navigate("/quality/mapping");
           break;
@@ -412,6 +415,7 @@ const Login = () => {
                   <MenuItem value="PLANNER">Planner</MenuItem>
                   <MenuItem value="WAREHOUSE">Warehouse</MenuItem>
                   <MenuItem value="QUALITY">Quality</MenuItem>
+                  <MenuItem value="BUYER">Buyer</MenuItem>
                 </TextField>
               </Grid>
             </Grid>

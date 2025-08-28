@@ -5,8 +5,7 @@ from django.utils.timezone import localtime
 from django.utils.timezone import now
 from django.utils import timezone
 from django.db import transaction, IntegrityError
-from django.db.models.signals import pre_save
-from django.dispatch import receiver
+from django.core.validators import MinValueValidator
 
 #SHIPMENT AREA
 class User(AbstractUser):
@@ -15,6 +14,7 @@ class User(AbstractUser):
         ('PLANNER', 'Planner'),
         ('WAREHOUSE', 'Warehouse'),
         ('QUALITY', 'Quality'),
+        ('BUYER', 'Buyer'),
     )
     
     role = models.CharField(max_length=15, choices=ROLE_CHOICES)
@@ -254,3 +254,136 @@ class PalletHistory(models.Model):
 
     def __str__(self):
         return f"{self.part_number} ({self.box_id}) - Historial"
+    
+#Withdrawal of material - Shipment area
+class ProductionOrder(models.Model):
+    order_number = models.CharField(max_length=50)
+    entry_date = models.DateTimeField(auto_now_add=True, null=True)
+    
+    def __str__(self):
+        return f"Orden {self.order_number}"
+
+class MaterialWithdrawal(models.Model):
+    production_order = models.ForeignKey(ProductionOrder, on_delete=models.CASCADE, related_name='material_withdrawals')
+    part_code = models.CharField(max_length=20, null=True)
+    batch = models.CharField(max_length=20, null=True)
+    qty = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], verbose_name="Cantidad")
+    #entry_date = models.DateTimeField(auto_now_add=True)
+    
+    user_out_material = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='material_withdrawals_removed')
+    
+    def __str__(self):
+        return f"{self.part_code} - {self.batch} - {self.qty}"
+    
+#Incoming
+class IncomingPart(models.Model):
+    code = models.CharField(max_length=20, unique=True)
+    fam = models.CharField(max_length=50)
+    descrip = models.TextField()
+    is_urgent = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.code} - {self.descrip}"
+
+
+class SupplierInfo(models.Model):
+    part = models.ForeignKey(IncomingPart, related_name="suppliers", on_delete=models.CASCADE)
+    supplier = models.CharField(max_length=200)
+    value = models.CharField(max_length=200, blank=True, null=True)
+    order = models.PositiveIntegerField()
+
+    def __str__(self):
+        return f"{self.supplier} ({self.value}) - {self.part.code}"
+    
+class Cone(models.Model):
+    COLOR_CHOICES = [
+        ("white", "White"),
+        ("yellow", "Yellow"),
+        ("green", "Green"),
+        ("red", "Red"),
+        ("black", "Black"),
+    ]
+
+    number = models.PositiveSmallIntegerField()
+    color = models.CharField(max_length=10, choices=COLOR_CHOICES)
+    is_assigned = models.BooleanField(default=False)
+    assigned_to = models.ForeignKey('MaterialEntry', null=True, blank=True, 
+                                  on_delete=models.SET_NULL, related_name='assigned_cones')  # Added related_name
+
+    class Meta:
+        unique_together = ['number', 'color']
+
+    def __str__(self):
+        return f"Cone {self.number} ({self.color})"
+    
+class MaterialEntry(models.Model):
+    STEP_INGRESO = 0
+    STEP_VALIDATION_MATERIAL = 1
+    STEP_VALIDATION_QUALITY = 2
+    STEP_LIBERADO = 3
+    STEP_FINALIZADO = 4
+
+    STEP_CHOICES = [
+        (STEP_INGRESO, "Ingreso"),
+        (STEP_VALIDATION_MATERIAL, "Validación Material"),
+        (STEP_VALIDATION_QUALITY, "Validación Calidad"),
+        (STEP_LIBERADO, "Liberado"),
+        (STEP_FINALIZADO, "Finalizado"),
+    ]
+    
+    cod_art = models.CharField(max_length=50)
+    descrip = models.TextField()
+    quantity = models.PositiveIntegerField()
+    supplier_name = models.CharField(max_length=200)
+    current_step = models.IntegerField(choices=STEP_CHOICES, default=STEP_INGRESO)
+    
+    #Buyer's form
+    supplier_company = models.CharField(max_length=200, blank=True, null=True)
+    order = models.CharField(max_length=50,blank=True, null=True)
+    request_guide = models.TextField(blank=True, null=True)
+    parcel_service = models.CharField(max_length=30, blank=True, null=True)
+    is_urgent = models.BooleanField(default=False)
+    arrived_date = models.DateField(blank=True, null=True)
+    invoice_number = models.CharField(max_length=50, blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='incoming_created', null=True)
+    
+    #steps to pass yellow cone
+    is_po = models.BooleanField(default=False)
+    is_invoice = models.BooleanField(default=False)
+    
+    #first steps to pass green cone
+    is_pn_ok = models.BooleanField(default=False)
+    is_pn_supp_ok = models.BooleanField(default=False)
+    is_qty_ok = models.BooleanField(default=False)
+    date_code = models.CharField(max_length=20, blank=True, null=True)
+    is_label_attached = models.BooleanField(default=False)
+    
+    #Second steps
+    measures = models.BooleanField(default=False)
+    #physical_state = models.CharField(max_length=50, blank=True, null=True)
+    packing_status = models.BooleanField(default=False)
+    special_characteristics = models.BooleanField(default=False)
+    quality_certified = models.BooleanField(default=False)
+    validated_labels = models.BooleanField(default=False)
+    
+    #Assign cone and user
+    cone = models.ForeignKey(Cone, null=True, blank=True, 
+                           on_delete=models.SET_NULL, related_name='material_entries')
+    user = models.ForeignKey(User, null=True, on_delete=models.SET_NULL)
+    
+    #White cone
+    created_at = models.DateTimeField(auto_now_add=True)
+    document_validation = models.DateTimeField(blank=True, null=True)
+    #Black cone
+    onhold_at = models.DateTimeField(blank=True, null=True)
+    #Yellow cone
+    validation_at = models.DateTimeField(blank=True, null=True)
+    #Green cone
+    released_at = models.DateTimeField(blank=True, null=True)
+    #Red cone
+    rejected_at = models.DateTimeField(blank=True, null=True)
+    
+    delivered_at = models.DateTimeField(blank=True, null=True)
+    
+    def __str__(self):
+        return f"{self.cod_art} - {self.quantity} by {self.user}"

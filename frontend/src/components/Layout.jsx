@@ -31,6 +31,10 @@ import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import QrCodeIcon from "@mui/icons-material/QrCode";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
+import AssignmentReturnedIcon from "@mui/icons-material/AssignmentReturned";
+import RuleFolderIcon from "@mui/icons-material/RuleFolder";
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
+import StoreIcon from "@mui/icons-material/Store";
 
 import { useState } from "react";
 import { getCurrentUser, logout } from "../services/auth";
@@ -98,14 +102,14 @@ const Layout = () => {
           ],
         },
         {
-          text: "Incoming",
-          icon: <ReceiptLongIcon />,
-          key: "incomings",
+          text: "Retiro Material",
+          icon: <AssignmentReturnedIcon />,
+          key: "withdrawal",
           subitems: [
             {
-              text: "Crear solicitud",
-              to: "/quality/mapping",
-              icon: <PeopleIcon />,
+              text: "Retirar material",
+              to: "/admin/withdrawalmaterial",
+              icon: <RuleFolderIcon />,
             },
           ],
         }
@@ -170,17 +174,55 @@ const Layout = () => {
               icon: <HistoryEduIcon />,
             },
           ],
+        },
+        {
+          text: "Retiro Material",
+          icon: <AssignmentReturnedIcon />,
+          key: "withdrawal",
+          subitems: [
+            {
+              text: "Retirar material",
+              to: "/warehouse/withdrawalmaterial",
+              icon: <RuleFolderIcon />,
+            },
+          ],
+        },
+        {
+          text: "Incomming",
+          icon: <ReceiptLongIcon />,
+          key: "incoming",
+          subitems: [
+            {
+              text: "Ingreso Material",
+              to: "/warehouse/mapping",
+              icon: <AssignmentIcon />,
+            },
+          ],
         }
       );
+    } else if (user.role === "BUYER") {
+      // BUYER
+      common.push({
+        text: "Raise Request",
+        icon: <StoreIcon />,
+        key: "buying",
+        subitems: [
+          {
+            text: "Hotlist Request",
+            to: "/buyer/hotlist",
+            icon: <ShoppingCartIcon />,
+          },
+        ],
+      });
     } else {
-      // WAREHOUSE
+      // QUALITY
       common.push({
         text: "Incomming",
         icon: <ReceiptLongIcon />,
         key: "shipments",
         subitems: [
           {
-            text: "Recibo",
+            text: "Ingreso Material",
             to: "/quality/mapping",
             icon: <AssignmentIcon />,
           },
@@ -243,7 +285,7 @@ const Layout = () => {
         <List>
           {getMenuItems().map((item) => {
             if (item.subitems) {
-              const isMenuExpanded = expandedMenus[item.key] ?? true;
+              const isMenuExpanded = expandedMenus[item.key] ?? false;
               const hasActiveChild = item.subitems.some((sub) =>
                 isActive(sub.to)
               );

@@ -19,15 +19,19 @@ import {
   IconButton,
   DialogActions,
   Tooltip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import api from "../../services/api";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CircleIcon from "@mui/icons-material/Circle";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 //color para identificar espacio en las location
 const getColor = (pallets, qty) => {
-  if (pallets >= 4 || qty >= 72) return "#ff4d4f";
+  if (pallets >= 10 || qty >= 72) return "#ff4d4f";
   if (pallets > 0 || qty > 0) return "#faad14";
   return "#52c41a";
 };
@@ -73,21 +77,21 @@ const ScanPallet = () => {
   const searchBufferRef = useRef("");
   let searchTimeout = null;
 
-  const handleSearchInput = (e) => {
-    searchBufferRef.current += e.nativeEvent.data || "";
+  // const handleSearchInput = (e) => {
+  //   searchBufferRef.current += e.nativeEvent.data || "";
 
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
+  //   if (searchTimeout) {
+  //     clearTimeout(searchTimeout);
+  //   }
 
-    searchTimeout = setTimeout(() => {
-      const finalSearch = searchBufferRef.current.trim();
-      searchBufferRef.current = "";
-      console.log("Escaneo de material:", finalSearch);
-      setSearchPart(finalSearch);
-      handleSearch(finalSearch); // ⬅️ Pasamos el valor capturado directamente
-    }, 100); // ajusta el tiempo si hace falta
-  };
+  //   searchTimeout = setTimeout(() => {
+  //     const finalSearch = searchBufferRef.current.trim();
+  //     searchBufferRef.current = "";
+  //     console.log("Escaneo de material:", finalSearch);
+  //     setSearchPart(finalSearch);
+  //     handleSearch(finalSearch); // ⬅️ Pasamos el valor capturado directamente
+  //   }, 100); // ajusta el tiempo si hace falta
+  // };
 
   const handleSubmit = async () => {
     if (!scan || !location) {
@@ -132,6 +136,21 @@ const ScanPallet = () => {
   const [notFound, setNotFound] = useState(false);
   const [filteredPallets, setFilteredPallets] = useState(null);
   const [searchedPartNumber, setSearchedPartNumber] = useState("");
+
+  //separar racks
+  const allowedRacks = ["Rack 4", "Rack I", "Rack J", "Rack K", "Rack L"];
+  const filteredLocations = locations.filter((loc) =>
+    allowedRacks.includes(loc.rack)
+  );
+
+  const groupedByRack = {};
+
+  filteredLocations.forEach((loc) => {
+    if (!groupedByRack[loc.rack]) {
+      groupedByRack[loc.rack] = [];
+    }
+    groupedByRack[loc.rack].push(loc);
+  });
 
   useEffect(() => {
     api
@@ -183,6 +202,37 @@ const ScanPallet = () => {
   //     setNotFound(true);
   //   }
   // };
+  // const handleSearch = (value = searchPart) => {
+  //   const trimmed = value.trim();
+  //   if (!trimmed) return;
+
+  //   const partToFind = extractPartNumberFromScan(trimmed);
+
+  //   const result = locations.find((loc) =>
+  //     loc.pallets?.some((p) => p.part_number.includes(partToFind))
+  //   );
+
+  //   if (result) {
+  //     setSearchResult(result);
+  //     setSelectedLocation(result);
+  //     setSearchedPartNumber(partToFind);
+  //     setSearchPart("");
+  //     setFilteredPallets(
+  //       result.pallets.filter((p) => p.part_number.includes(partToFind))
+  //     );
+  //     setDialogOpen(true);
+  //     setNotFound(false);
+  //   } else {
+  //     setSearchResult(null);
+  //     setFilteredPallets(null);
+  //     setSearchPart("");
+  //     setDialogOpen(false);
+  //     setNotFound(true);
+  //   }
+  // };
+  const timeoutRef = useRef(null);
+  const lastInputTimeRef = useRef(Date.now());
+
   const handleSearch = (value = searchPart) => {
     const trimmed = value.trim();
     if (!trimmed) return;
@@ -210,6 +260,46 @@ const ScanPallet = () => {
       setDialogOpen(false);
       setNotFound(true);
     }
+  };
+
+  const handleManualChange = (e) => {
+    setSearchPart(e.target.value); // No dispara búsqueda
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      handleSearch(); // Solo cuando el usuario da Enter
+    }
+  };
+
+  const handleSearchInput = (e) => {
+    const char = e.nativeEvent.data || "";
+    if (!char) return;
+
+    const now = Date.now();
+    const delta = now - lastInputTimeRef.current;
+    lastInputTimeRef.current = now;
+
+    // Si el tiempo entre teclas es mayor a 100ms, asumimos que es escritura manual
+    if (delta > 100) {
+      searchBufferRef.current = "";
+      return; // ignoramos input lento (manual)
+    }
+
+    // Si es escáner (entrada muy rápida)
+    searchBufferRef.current += char;
+
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      const scannedValue = searchBufferRef.current.trim();
+      searchBufferRef.current = "";
+      console.log("Escaneo detectado:", scannedValue);
+      setSearchPart(scannedValue); // Esto actualiza el input visible
+      handleSearch(scannedValue);
+    }, 80); // Bajo porque escaneo es rápido
   };
 
   //Detalles - Location
@@ -256,7 +346,7 @@ const ScanPallet = () => {
   //Reload
   const fetchLocations = async () => {
     try {
-      const response = await api.get("/location-status/"); // Ajusta a tu endpoint real
+      const response = await api.get("/location-status/");
       setLocations(response.data);
     } catch (err) {
       console.error("Error al cargar ubicaciones:", err);
@@ -382,12 +472,21 @@ const ScanPallet = () => {
               if (e.key === "Enter") handleSearch();
             }}
           /> */}
-          <TextField
+          {/* <TextField
             label="Buscar por número de parte"
             variant="outlined"
             fullWidth
             value={searchPart}
             onInput={handleSearchInput}
+          /> */}
+          <TextField
+            label="Buscar por número de parte (escáner o manual)"
+            variant="outlined"
+            fullWidth
+            value={searchPart}
+            onChange={handleManualChange}
+            onInput={handleSearchInput}
+            onKeyDown={handleKeyDown}
           />
         </Box>
 
@@ -458,7 +557,7 @@ const ScanPallet = () => {
           </Alert>
         )} */}
 
-        <Grid container spacing={3} columns={4}>
+        {/* <Grid container spacing={3} columns={4}>
           {locations.map((loc, index) => (
             <Grid key={index}>
               <Paper
@@ -489,7 +588,98 @@ const ScanPallet = () => {
               </Paper>
             </Grid>
           ))}
-        </Grid>
+        </Grid> */}
+        {Object.entries(groupedByRack).map(([rackName, rackLocations]) => (
+          <Accordion key={rackName}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography sx={{ fontWeight: "bold" }}>{rackName}</Typography>
+            </AccordionSummary>
+            {/* <AccordionDetails>
+              <Grid container spacing={2}>
+                {rackLocations.map((loc, index) => (
+                  <Grid item xs={12} sm={6} md={4} lg={2} key={index}>
+                    <Paper
+                      onClick={() => handleLocationClick(loc)}
+                      elevation={3}
+                      sx={{
+                        p: 2,
+                        textAlign: "center",
+                        backgroundColor: getColor(
+                          loc.pallet_count,
+                          loc.total_quantity
+                        ),
+                        color: "#fff",
+                        fontWeight: "bold",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        transition: "0.2s",
+                        "&:hover": {
+                          transform: "scale(1.03)",
+                        },
+                      }}
+                    >
+                      {loc.code_location}
+                      <Typography variant="body2">
+                        {loc.pallet_count} N/P
+                      </Typography>
+                      <Typography variant="body2">
+                        {loc.total_quantity} piezas
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </AccordionDetails> */}
+            <AccordionDetails>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(10, 1fr)", // tantas columnas como necesites
+                  gridTemplateRows: "repeat(6, 100px)", // 5 niveles fijos
+                  gap: 2,
+                }}
+              >
+                {rackLocations.map((loc) => {
+                  const code = loc.code_location;
+                  const col = parseInt(code.slice(2, 4), 10); // 03 -> columna 3
+                  const level = parseInt(code.slice(4, 6), 10); // 01..05
+                  const row = 6 - level; // invertimos: 1 = abajo, 5 = arriba
+
+                  return (
+                    <Box
+                      key={loc.code_location}
+                      sx={{
+                        gridColumn: col,
+                        gridRow: row,
+                        p: 2,
+                        textAlign: "center",
+                        backgroundColor: getColor(
+                          loc.pallet_count,
+                          loc.total_quantity
+                        ),
+                        color: "#fff",
+                        fontWeight: "bold",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        transition: "0.2s",
+                        "&:hover": { transform: "scale(1.03)" },
+                      }}
+                      onClick={() => handleLocationClick(loc)}
+                    >
+                      {loc.code_location}
+                      <Typography variant="body2">
+                        {loc.pallet_count} N/P
+                      </Typography>
+                      <Typography variant="body2">
+                        {loc.total_quantity} piezas
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+        ))}
 
         <Dialog
           open={dialogOpen}

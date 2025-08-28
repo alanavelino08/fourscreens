@@ -1,8 +1,8 @@
 from rest_framework import viewsets, status, permissions, generics, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, permission_classes
-from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, PalletHistory
-from .serializers import UserSerializer, RequestSerializer, ShipmentSerializer, PartNumberSerializer, TransportSerializer, LocationSerializer, PalletSerializer
+from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, PalletHistory, IncomingPart, SupplierInfo, Cone, MaterialEntry, ProductionOrder, MaterialWithdrawal
+from .serializers import UserSerializer, RequestSerializer, ShipmentSerializer, PartNumberSerializer, TransportSerializer, PalletSerializer, MaterialEntrySerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -21,6 +21,12 @@ import pandas as pd
 from rest_framework.parsers import MultiPartParser
 from rest_framework.views import APIView
 import re
+import pydoc
+import os
+from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from io import BytesIO
+from django.core.exceptions import ValidationError
 
 
 class IsAdmin(permissions.BasePermission):
@@ -538,7 +544,7 @@ def process_scan(scan_str, user, location_str):
     pallet_count = PalletScan.objects.filter(location=location).count()
     total_quantity = PalletScan.objects.filter(location=location).aggregate(total=Sum('quantity'))['total'] or 0
 
-    if pallet_count >= 4 or (total_quantity + quantity) > 72:
+    if pallet_count >= 10 or (total_quantity + quantity) > 72:
         raise ValueError("La ubicación ya está ocupada o supera el límite permitido")
 
     # Creamos Pallet - Material Nuevo
@@ -644,7 +650,7 @@ def update_pallet_quantity(request, pk):
     try:
         pallet = PalletScan.objects.get(pk=pk)
         new_qty = request.data.get("quantity")
-        if new_qty is None or int(new_qty) < 0:
+        if new_qty is None or int(new_qty) < 0 or int(new_qty) > 72:
             return Response({"error": "Cantidad inválida"}, status=400)
 
         pallet.quantity = int(new_qty)
@@ -683,6 +689,229 @@ def pallet_history(request):
 
     return Response(serialized)
 
+#Withdrawal Material
+class SaveMaterialWithdrawalView(APIView):
+    def post(self, request):
+        order_number = request.data.get("order_number")
+        scanned_lines = request.data.get("lines", [])
+
+        if not order_number:
+            return Response({"error": "order_number es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not scanned_lines:
+            return Response({"error": "No se enviaron líneas para registrar"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Buscar o crear la orden de producción
+        production_order, _ = ProductionOrder.objects.get_or_create(order_number=order_number)
+
+        saved_entries = []
+        for line in scanned_lines:
+            try:
+                line = line.strip()
+
+                if "ÇOD+" in line and "LOT+" in line and "QTY+" in line:
+                    # Caso escaneado
+                    parts = line.split("´")
+                    part_code = parts[0].replace("ÇOD+", "").strip()
+                    batch = parts[1].replace("LOT+", "").strip()
+                    qty = float(parts[2].replace("QTY+", "").strip())
+                else:
+                    # Caso manual -> formato: "3040143 003455053 192"
+                    parts = line.split()
+                    if len(parts) == 3:
+                        part_code, batch, qty = parts[0], parts[1], float(parts[2])
+                    elif len(parts) == 2:
+                        part_code, qty = parts[0], float(parts[1])
+                        batch = None   # batch opcional
+                    else:
+                        raise ValueError("Formato manual inválido. Usa: 'part_code batch qty' o 'part_code qty'")
+
+                # Guardar en BD
+                withdrawal = MaterialWithdrawal.objects.create(
+                    production_order=production_order,
+                    part_code=part_code,
+                    batch=batch,
+                    qty=qty,
+                    user_out_material=request.user
+                )
+                saved_entries.append({
+                    "part_code": part_code,
+                    "batch": batch,
+                    "qty": qty
+                })
+
+            except (IndexError, ValueError, ValidationError) as e:
+                return Response(
+                    {"error": f"Error procesando línea '{line}': {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        return Response({
+            "message": f"Se registraron {len(saved_entries)} retiros de material",
+            "order_number": production_order.order_number,
+            "entries": saved_entries
+        }, status=status.HTTP_201_CREATED)
+
+        
+class MaterialWithdrawalSummaryView(APIView):
+    def get(self, request):
+        # Filtros
+        part_code = request.query_params.get("part_code", "").strip()
+        order_number = request.query_params.get("order_number", "").strip()
+        date = request.query_params.get("date", "").strip()
+
+        withdrawals = MaterialWithdrawal.objects.select_related("production_order", "user_out_material")
+
+        # Aplicar filtros
+        if part_code:
+            withdrawals = withdrawals.filter(part_code__icontains=part_code)
+        if order_number:
+            withdrawals = withdrawals.filter(production_order__order_number__icontains=order_number)
+        if date:
+            withdrawals = withdrawals.filter(production_order__entry_date__date=date)
+
+        # Agrupar solo por OF y part_code
+        summary = (
+            withdrawals
+            .values(
+                "production_order__order_number",
+                "part_code",
+                "production_order__entry_date",
+            )
+            .annotate(
+                total_qty=Sum("qty"),
+                last_user_id=Max("user_out_material__id"),
+                last_user_name=Max("user_out_material__username"),
+            )
+            .order_by("production_order__order_number", "part_code")
+        )
+
+        data = [
+            {
+                "order_number": item["production_order__order_number"],
+                "part_code": item["part_code"],
+                "total_qty": item["total_qty"],
+                "entry_date": item["production_order__entry_date"],
+                "user_out_material": {
+                    "id": item["last_user_id"],
+                    "username": item["last_user_name"],
+                }
+            }
+            for item in summary
+        ]
+
+        return Response(data, status=status.HTTP_200_OK)
+
+class ValidarDescargasView(APIView):
+    def get(self, request):
+        # --- Parámetros ---
+        fecha_str = request.query_params.get("date", "").strip()
+        export_excel = request.query_params.get("export", "0") == "1"
+        part_code_filter = request.query_params.get("part_code", "").strip()
+        order_number_filter = request.query_params.get("order_number", "").strip()
+
+        if not fecha_str:
+            return Response({"error": "El parámetro 'date' es obligatorio"}, status=400)
+
+        try:
+            fecha_excel = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+
+            # --- Ruta del archivo Excel ---
+            ruta_archivo = os.path.join(
+                r"\\ikormx-files\Supply Chain\.06- Reporting\13 Reportes  Diarios",
+                str(fecha_excel.year),
+                "REPORTES  HOY.xlsx"
+            )
+            if not os.path.exists(ruta_archivo):
+                return Response({"error": f"No se encontró el archivo {ruta_archivo}"}, status=404)
+
+            # --- Leer y filtrar Excel ---
+            df = pd.read_excel(
+                ruta_archivo,
+                sheet_name="MOVIMIENTOS MES  (2K DIARIA)",
+                skiprows=2
+            )
+            # Normalizar fecha
+            df["fech_mov"] = pd.to_datetime(df["fech_mov"], format="%d/%m/%Y", errors="coerce").dt.date
+
+            df_filtrado = df[
+                (df["fech_mov"] == fecha_excel) &
+                (df["tip_mov"] == "SF") &
+                (df["cod_alm"] == 201)
+            ].copy()
+
+            # Normalizar claves y cantidades de Excel
+            df_filtrado["n_of"] = df_filtrado["n_of"].fillna("").astype(str).str.strip()
+            df_filtrado["cod_art"] = df_filtrado["cod_art"].fillna("").astype(str).str.strip()
+            df_filtrado["cant_sal"] = pd.to_numeric(df_filtrado["cant_sal"], errors="coerce").fillna(0).astype(float)
+
+            # Agrupar Excel por (Orden, Parte)
+            excel_full = (
+                df_filtrado.groupby(["n_of", "cod_art"])["cant_sal"].sum().to_dict()
+            )
+
+            # --- Query BD (mismos filtros que tu grid si los mandas) ---
+            qs = MaterialWithdrawal.objects.filter(production_order__entry_date__date=fecha_excel)
+            if part_code_filter:
+                qs = qs.filter(part_code__icontains=part_code_filter)
+            if order_number_filter:
+                qs = qs.filter(production_order__order_number__icontains=order_number_filter)
+
+            bd_dict = {
+                (str(w["production_order__order_number"]).strip(), str(w["part_code"]).strip()): float(w["total_qty"])
+                for w in (
+                    qs.values("production_order__order_number", "part_code")
+                      .annotate(total_qty=Sum("qty"))
+                )
+            }
+
+            # --- Intersección BD ∩ Excel ---
+            keys_intersection = [k for k in bd_dict.keys() if k in excel_full]
+
+            resultados = []
+            for key in keys_intersection:
+                order_number, part_code = key
+                qty_bd = bd_dict[key]
+                qty_excel = float(excel_full[key])
+
+                diferencia = qty_excel - qty_bd
+                # tolerancia numérica para evitar -0.0 o 1e-15
+                if abs(diferencia) < 1e-9:
+                    diferencia = 0.0
+
+                estado = "OK" if diferencia == 0 else ("FALTA" if diferencia > 0 else "SOBRA")
+
+                resultados.append({
+                    "Orden": order_number,
+                    "Parte": part_code,
+                    "Cantidad_Excel": qty_excel,
+                    "Cantidad_BD": qty_bd,
+                    "Diferencia": diferencia,
+                    "Estado": estado
+                })
+
+            # Ordenar salida
+            resultados.sort(key=lambda r: (r["Orden"], r["Parte"]))
+
+            # --- Exportación a Excel o JSON ---
+            if export_excel:
+                df_resultados = pd.DataFrame(resultados)
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    df_resultados.to_excel(writer, index=False, sheet_name="Validación")
+                output.seek(0)
+
+                response = HttpResponse(
+                    output,
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                response["Content-Disposition"] = f'attachment; filename="validacion_{fecha_str}.xlsx"'
+                return response
+
+            return Response(resultados, status=200)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
     
 #INCOMING    
 class ExcelUploadView(APIView):
@@ -701,3 +930,478 @@ class ExcelUploadView(APIView):
             return Response({"data": data}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+# class ExcelDataView(APIView):
+
+#     def get(self, request):
+#         network_path = r"\\ikormx-files\Publico\Dashboard\Downtime"
+#         file_name = "REPORTES HOY__.xlsx"
+#         #file_name = "NumerosParte.xlsx"
+
+#         try:
+#             full_path = os.path.join(network_path, file_name)
+#             # print("Ruta completa:", full_path)
+
+#             excel_data = pd.ExcelFile(full_path)
+#             #opor_data = pd.read_excel(excel_data, sheet_name='OPOR SUC 8-12-13-39 (6K)')
+#             #opor_data = pd.read_excel(excel_data, sheet_name='HojaTest')
+            
+#             # df_unicos = opor_data.drop_duplicates(subset=["cod_art"])
+#             opor_data = pd.read_excel(excel_data, sheet_name='OPOR SUC 8-12-13-39 (6K)', 
+#                          skiprows=2)  # Saltar las primeras 2 filas
+#             # df_unicos.to_excel("solo_unicos.xlsx", index=False)
+#             n_pedido_type = opor_data['n_pedido'].dtype
+#             print(f"El tipo de datos de la columna n_pedido es: {n_pedido_type}")
+#             #print(opor_data)
+
+#             html = opor_data.to_html(index=False)
+#             return HttpResponse(html)
+
+#         except Exception as e:
+#             return HttpResponse(
+#                 f"<h3>Error al leer el archivo:</h3><p>{str(e)}</p>",
+#                 status=500
+#             )
+
+#Match Excel y tabla en BD
+class MatchPedidoView(APIView):
+    def get(self, request):
+        n_pedido = request.query_params.get("n_pedido")
+        if not n_pedido:
+            return JsonResponse({"error": "La PO es requerida"}, status=400)
+
+        #network_path = r"\\ikormx-files\Publico\Dashboard\Downtime"
+        network_path = r"\\ikormx-files\Supply Chain\.06- Reporting\13 Reportes  Diarios\2025"
+        file_name = "REPORTES  HOY.xlsx"
+        #file_name = "REPORTES HOY__.xlsx"
+        full_path = os.path.join(network_path, file_name)
+
+        try:
+            excel_data = pd.ExcelFile(full_path)
+            df = pd.read_excel(excel_data, sheet_name='OPOR SUC 8-12-13-39 (6K)', skiprows=2)
+            df_filtered = df[df["n_pedido"] == int(n_pedido)]
+
+            results = []
+            for _, row in df_filtered.iterrows():
+                cod_art = str(int(row["cod_art"])).strip()
+                cant_ped = row["cant_ped"]
+                name_fact = row["nombre"]
+
+                incoming_info = IncomingPart.objects.filter(code=cod_art).first()
+
+                suppliers_data = []
+                if incoming_info:
+                    description = incoming_info.descrip
+                    is_urgent = incoming_info.is_urgent
+                    suppliers = incoming_info.suppliers.order_by("order")
+                    suppliers_data = [
+                        {
+                            "supplier": s.supplier,
+                            "value": s.value,
+                            "order": s.order
+                        }
+                        for s in suppliers
+                    ]
+
+                if incoming_info:
+                    results.append({
+                        "cod_art": cod_art,
+                        "cant_ped": cant_ped,
+                        "descrip": description,
+                        "is_urgent": is_urgent,
+                        "name": name_fact,
+                        "suppliers": suppliers_data,
+                        "order": n_pedido
+                    })
+
+            return JsonResponse({"n_pedido": n_pedido, "results": results}, safe=False)
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+#Save material lines        
+class SaveMaterialEntryView(APIView):
+    def post(self, request):
+        user = request.user
+        entries = request.data.get("entries", [])
+        print(entries)
+        saved_entries = []
+        for item in entries:
+            cod_art = item.get("cod_art")
+            descrip = item.get("descrip")
+            quantity = item.get("quantity")
+            urgent = item.get("is_urgent")
+            supp_name = item.get("name")
+            supplier_name = item.get("supplier_name")
+            order = item.get("order")
+
+            # Buscar un cono blanco disponible
+            white_cone = Cone.objects.filter(color="white", is_assigned=False).order_by("number").first()
+            if not white_cone:
+                return Response({"detail": "No hay conos blancos disponibles."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Crear entrada
+            entry = MaterialEntry.objects.create(
+                cod_art=cod_art,
+                descrip=descrip,
+                quantity=quantity,
+                is_urgent=urgent,
+                supplier_company=supp_name,
+                supplier_name=supplier_name,
+                order = order,
+                user=user,
+                cone=white_cone,
+            )
+
+            # Asignar cono
+            white_cone.is_assigned = True
+            white_cone.assigned_to = entry
+            white_cone.save()
+
+            saved_entries.append({
+                "id": entry.id,
+                "cone_number": white_cone.number,
+                "cone_color": white_cone.color,
+            })
+
+        return Response({"saved": saved_entries}, status=status.HTTP_201_CREATED)
+
+#Get material lines added
+class MaterialEntryListView(APIView):
+    #permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        entries = MaterialEntry.objects.select_related('cone').order_by('created_at')
+        data = MaterialEntrySerializer(entries, many=True).data
+        return Response(data)
+
+#advance to yellow or black cone.
+class AdvanceMaterialEntryView(APIView):
+    def post(self, request, entry_id):
+        try:
+            entry = MaterialEntry.objects.get(id=entry_id)
+        except MaterialEntry.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+
+        entry.is_po = request.data.get("is_po", False)
+        entry.is_invoice = request.data.get("is_invoice", False)
+
+        # decidir nuevo color y current_step
+        if entry.is_po and entry.is_invoice:
+            new_color = "yellow"
+            entry.document_validation = timezone.now()
+            entry.current_step = MaterialEntry.STEP_VALIDATION_MATERIAL
+            
+            if not entry.user:
+                entry.user = request.user
+        else:
+            new_color = "black"
+            entry.onhold_at = timezone.now()
+            entry.current_step = MaterialEntry.STEP_INGRESO
+            
+            # if not entry.user:
+            #     entry.user = request.user
+            
+            # creator_email = entry.created_by.email
+            # first_name = entry.created_by.first_name
+            # last_name = entry.created_by.last_name
+            
+            # full_name = f"{first_name} {last_name}"
+            
+            # to_emails = [creator_email]
+            
+            # html_content = f"""
+            # <h4>Hola {full_name}</h4>
+            
+            
+            # """
+
+        entry.save()
+
+        # liberar cono antiguo
+        if entry.cone:
+            entry.cone.is_assigned = False
+            entry.cone.assigned_to = None
+            entry.cone.save()
+
+        new_cone = Cone.objects.filter(color=new_color, is_assigned=False).first()
+        if not new_cone:
+            return Response({"detail": f"No hay conos {new_color} disponibles"}, status=400)
+
+        new_cone.is_assigned = True
+        new_cone.assigned_to = entry
+        new_cone.save()
+
+        entry.cone = new_cone
+        entry.save()
+
+        return Response({"success": True, "current_step": entry.current_step}, status=status.HTTP_200_OK)
+
+#advance from yellow cone to green or red
+class AdvanceYellowConeView(APIView):
+    def post(self, request, entry_id):
+        try:
+            entry = MaterialEntry.objects.get(id=entry_id)
+        except MaterialEntry.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+
+        cone_color = entry.cone.color if entry.cone else None
+        if cone_color != "yellow":
+            return Response({"detail": "No está en cono amarillo"}, status=400)
+
+        stage = request.data.get("stage")
+
+        if stage == "material":
+            entry.is_pn_ok = request.data.get("is_pn_ok", False)
+            entry.is_pn_supp_ok = request.data.get("is_pn_supp_ok", False)
+            entry.is_qty_ok = request.data.get("is_qty_ok", False)
+            entry.date_code = request.data.get("date_code", "")
+            entry.is_label_attached = request.data.get("is_label_attached", False)
+            entry.validation_at = timezone.now()
+            entry.save()
+
+            if not all([
+                entry.is_pn_ok,
+                entry.is_pn_supp_ok,
+                entry.is_qty_ok,
+                entry.is_label_attached
+            ]):
+                new_color = "red"
+                entry.rejected_at = timezone.now()
+                entry.current_step = MaterialEntry.STEP_FINALIZADO
+            else:
+                entry.current_step = MaterialEntry.STEP_VALIDATION_MATERIAL
+                entry.save()
+                return Response({"success": True, "next_step": "quality", "current_step": entry.current_step}, status=200)
+
+        elif stage == "quality":
+            entry.measures = request.data.get("measures", False)
+            entry.packing_status = request.data.get("packing_status", False)
+            entry.special_characteristics = request.data.get("special_characteristics", False)
+            entry.quality_certified = request.data.get("quality_certified", False)
+            entry.validated_labels = request.data.get("validated_labels", False)
+            entry.released_at = timezone.now()
+            entry.save()
+
+            if not all([
+                entry.measures,
+                entry.validated_labels,
+                entry.packing_status
+            ]):
+                new_color = "red"
+                entry.rejected_at = timezone.now()
+                entry.current_step = MaterialEntry.STEP_VALIDATION_QUALITY
+            else:
+                new_color = "green"
+                entry.current_step = MaterialEntry.STEP_LIBERADO
+        else:
+            return Response({"detail": "Etapa inválida"}, status=400)
+
+        # liberar cono actual
+        if entry.cone:
+            entry.cone.is_assigned = False
+            entry.cone.assigned_to = None
+            entry.cone.save()
+
+        new_cone = Cone.objects.filter(color=new_color, is_assigned=False).first()
+        if not new_cone:
+            return Response({"detail": f"No hay conos {new_color} disponibles"}, status=400)
+
+        new_cone.is_assigned = True
+        new_cone.assigned_to = entry
+        new_cone.save()
+
+        entry.cone = new_cone
+        entry.save()
+
+        return Response({"success": True, "cone": new_color, "current_step": entry.current_step}, status=200)
+
+class FinalizeGreenConeView(APIView):
+    def post(self, request, entry_id):
+        try:
+            entry = MaterialEntry.objects.get(id=entry_id)
+        except MaterialEntry.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+
+        # Validar que tiene un cono verde
+        cone_color = entry.cone.color if entry.cone else None
+        if cone_color != "green":
+            return Response({"detail": "El material no está en cono verde"}, status=400)
+
+        # Liberar el cono verde
+        if entry.cone:
+            entry.cone.is_assigned = False
+            entry.cone.assigned_to = None
+            entry.cone.save()
+            entry.cone = None
+
+        # Cambiar estado a finalizado y registrar hora de entrega
+        entry.current_step = MaterialEntry.STEP_FINALIZADO
+        entry.delivered_at = timezone.now()
+        entry.save()
+
+        return Response({
+            "success": True,
+            "detail": "Material entregado, cono liberado",
+            "current_step": entry.current_step,
+            "delivered_at": entry.delivered_at
+        }, status=200)
+
+
+class StepsListView(APIView):
+    def get(self, request):
+        # Devuelve lista de labels en orden
+        labels = [label for _, label in MaterialEntry.STEP_CHOICES]
+        return Response(labels)
+
+class BuyerMaterialRequestView(APIView):
+    def post(self, request):
+        user = request.user
+        entries = request.data.get("entries", [])
+        if not entries:
+            return Response({"detail": "No se recibieron líneas."}, status=status.HTTP_400_BAD_REQUEST)
+
+        saved_entries = []
+
+        for item in entries:
+            cod_art = item.get("cod_art")
+            quantity = item.get("quantity")
+            supplier_company = item.get("supplier_company")
+            order = item.get("order")
+            request_guide = item.get("request_guide")
+            parcel_service = item.get("parcel_service")
+            is_urgent = item.get("is_urgent", True)
+            arrived_date = item.get("arrived_date")
+            invoice_number = item.get("invoice_number")
+
+            # Validar IncomingPart y obtener descripción
+            incoming_part = IncomingPart.objects.filter(code=cod_art).first()
+            if not incoming_part:
+                return Response(
+                    {"detail": f"No se encontró descripción para el código {cod_art}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Buscar un cono blanco disponible
+            white_cone = Cone.objects.filter(color="white", is_assigned=False).order_by("number").first()
+            if not white_cone:
+                return Response(
+                    {"detail": "No hay conos blancos disponibles."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Crear entrada
+            entry = MaterialEntry.objects.create(
+                cod_art=cod_art,
+                descrip=incoming_part.descrip,
+                quantity=quantity,
+                current_step=MaterialEntry.STEP_INGRESO,
+                supplier_company=supplier_company,
+                order=order,
+                request_guide=request_guide,
+                parcel_service=parcel_service,
+                is_urgent=True,
+                arrived_date=arrived_date,
+                invoice_number=invoice_number,
+                created_by=user,
+                cone=white_cone,
+            )
+
+            # Marcar cono como asignado
+            white_cone.is_assigned = True
+            white_cone.assigned_to = entry
+            white_cone.save()
+
+            saved_entries.append({
+                "id": entry.id,
+                "cod_art": entry.cod_art,
+                "descrip": entry.descrip,
+                "quantity": entry.quantity,
+                "order": entry.order,
+                "supplier_company": entry.supplier_company,
+                "cone_number": white_cone.number,
+                "cone_color": white_cone.color,
+                "is_urgent": entry.is_urgent,
+                "arrived_date": entry.arrived_date
+            })
+
+        return Response({"saved": saved_entries}, status=status.HTTP_201_CREATED)    
+    
+class BuyerValidatePartView(APIView):
+    def get(self, request, cod_art):
+        incoming_part = IncomingPart.objects.filter(code=cod_art).first()
+        if not incoming_part:
+            return Response(
+                {"detail": f"No se encontró el código {cod_art}"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response({
+            "cod_art": cod_art,
+            "descrip": incoming_part.descrip,
+            "is_urgent": True
+        }, status=status.HTTP_200_OK)
+
+        
+
+#Massive insertions into tables
+@csrf_exempt
+def cargar_partes(request):
+    if request.method == "POST":
+        network_path = r"\\ikormx-files\Publico\Dashboard\Downtime"
+        file_name = "insertarnpmissing.xlsx"
+        full_path = os.path.join(network_path, file_name)
+
+        try:
+            df = pd.read_excel(full_path)
+
+            # nuevos_registros = []
+            # for _, d in df.iterrows():
+            #     #print(f'Valor cod_cli del Excel: "{d["cod_cli"]}" tipo: {type(d["cod_cli"])}')
+            #     project = None
+            #     if pd.notna(d["cod_cli"]):
+            #         cod_cli_val = str(int(d["cod_cli"]))
+            #         cod_cli_val = cod_cli_val.strip()
+            #         project = Client.objects.filter(cod_cli=cod_cli_val).first()
+            #         print(f'Buscando cod_cli="{cod_cli_val}" → {project}')
+            #     print(project)
+            #     family = Family.objects.filter(incoming_customer_pn=d["incoming_customer_pn"]).first() if pd.notna(d["incoming_customer_pn"]) else None
+            #     tipo = TypeIncoming.objects.filter(type_art=d["type_art"]).first() if pd.notna(d["type_art"]) else None
+
+            #     nuevos_registros.append(IncommingPartNumber(
+            #         internal_pn=d["internal_pn"],
+            #         supplier_pn=d["supplier_pn"],
+            #         des_art=d["des_art"],
+            #         project_inc=project,
+            #         family_inc=family,
+            #         type_inc=tipo
+            #     ))
+
+            # IncommingPartNumber.objects.bulk_create(nuevos_registros)
+            for _, row in df.iterrows():
+                part, _ = IncomingPart.objects.get_or_create(
+                    code=row['code'],
+                    defaults={
+                        'fam': row['fam'],
+                        'descrip': row['descrip']
+                    }
+                )
+
+                for i in range(1, 15):
+                    supplier_name = row.get(f'Nombre_{i}')
+                    supplier_value = row.get(f'Valor_{i}')
+
+                    if pd.notna(supplier_name) or pd.notna(supplier_value):
+                        SupplierInfo.objects.create(
+                            part=part,
+                            supplier=supplier_name if pd.notna(supplier_name) else "",
+                            value=supplier_value if pd.notna(supplier_value) else "",
+                            order=i
+                        )
+
+            return JsonResponse({"mensaje": "Registros cargados con éxito."})
+
+        except Exception as e:
+            return JsonResponse({"error": f"Error al procesar el archivo: {str(e)}"}, status=500)
+
+    return JsonResponse({"error": "Método no permitido"}, status=405)

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan
+from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, Cone, MaterialEntry
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
 
@@ -164,3 +164,21 @@ class PalletSerializer(serializers.ModelSerializer):
     class Meta:
         model = PalletScan
         fields = '__all__'
+        
+class ConeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Cone
+        fields = ['number', 'color']
+
+class MaterialEntrySerializer(serializers.ModelSerializer):
+    step_label = serializers.SerializerMethodField()
+    user = UserSerializer(read_only=True)
+    cone = ConeSerializer()
+
+    class Meta:
+        model = MaterialEntry
+        fields = '__all__'
+        
+        
+    def get_step_label(self, obj):
+        return dict(MaterialEntry.STEP_CHOICES).get(obj.current_step, "")
