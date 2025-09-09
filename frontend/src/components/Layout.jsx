@@ -35,6 +35,7 @@ import AssignmentReturnedIcon from "@mui/icons-material/AssignmentReturned";
 import RuleFolderIcon from "@mui/icons-material/RuleFolder";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import StoreIcon from "@mui/icons-material/Store";
+import TableChartIcon from "@mui/icons-material/TableChart";
 
 import { useState } from "react";
 import { getCurrentUser, logout } from "../services/auth";
@@ -196,6 +197,11 @@ const Layout = () => {
               text: "Ingreso Material",
               to: "/warehouse/mapping",
               icon: <AssignmentIcon />,
+            },
+            {
+              text: "Grafico de Ingreso",
+              to: "/warehouse/scoreboardmaterial",
+              icon: <TableChartIcon />,
             },
           ],
         }

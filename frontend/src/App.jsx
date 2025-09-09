@@ -15,6 +15,7 @@ import LocateMaterial from "./pages/Warehouse/Locatematerial";
 import MaterialHistory from "./pages/Warehouse/Materialhistory";
 import WithdrawalMaterial from "./pages/Warehouse/Withdrawal";
 import HotlistRequest from "./pages/Buyer/Hotlist";
+import MaterialScoreboard from "./pages/Quality/Materialscoreboard";
 
 function App() {
   return (
@@ -160,12 +161,30 @@ function App() {
           }
         />
 
+        <Route
+          path="/warehouse/scoreboardmaterial"
+          element={
+            <ProtectedRoute allowedRoles={["WAREHOUSE"]}>
+              <MaterialScoreboard showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Quality Routes */}
         <Route
           path="/quality/mapping"
           element={
             <ProtectedRoute allowedRoles={["QUALITY"]}>
               <MappingMaterial showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quality/scoreboardmaterial"
+          element={
+            <ProtectedRoute allowedRoles={["QUALITY"]}>
+              <MaterialScoreboard showAll={true} />
             </ProtectedRoute>
           }
         />

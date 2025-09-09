@@ -71,6 +71,7 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
   };
 
   // Agregar entrada (escáner o manual)
+  // Agregar entrada (escáner o manual)
   // const addEntry = (item) => {
   //   if (item.data) {
   //     let part_code = "";
@@ -93,6 +94,15 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
 
   //         if (!part_code || isNaN(qty)) {
   //           throw new Error("Código o cantidad inválida.");
+  //         }
+
+  //         if (entries.some((e) => e.batch === batch)) {
+  //           setFeedback({
+  //             open: true,
+  //             message: `El lote ${batch} ya fue ingresado.`,
+  //             severity: "warning",
+  //           });
+  //           return;
   //         }
 
   //         setEntries((prev) => [...prev, { part_code, batch, qty }]);
@@ -132,10 +142,27 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
   //         return;
   //       }
 
+  //       if (batch && entries.some((e) => e.batch === batch)) {
+  //         setFeedback({
+  //           open: true,
+  //           message: `El lote ${batch} ya fue ingresado.`,
+  //           severity: "warning",
+  //         });
+  //         return;
+  //       }
+
   //       setEntries((prev) => [...prev, { part_code, batch, qty }]);
   //     }
   //   } else {
   //     // Caso manual con inputs directos
+  //     if (item.batch && entries.some((e) => e.batch === item.batch)) {
+  //       setFeedback({
+  //         open: true,
+  //         message: `El lote ${item.batch} ya fue ingresado.`,
+  //         severity: "warning",
+  //       });
+  //       return;
+  //     }
   //     setEntries((prev) => [...prev, item]);
   //   }
 
@@ -143,29 +170,28 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
   //   setManualBatch("");
   //   setManualQty("");
   // };
-  // Agregar entrada (escáner o manual)
   const addEntry = (item) => {
     if (item.data) {
       let part_code = "";
       let batch = "";
       let qty = 0;
 
-      if (
-        item.data.includes("ÇOD+") &&
-        item.data.includes("LOT+") &&
-        item.data.includes("QTY+")
-      ) {
-        try {
-          const parts = item.data.split("´");
-          if (parts.length !== 3) {
-            throw new Error("Formato inválido en el código escaneado.");
-          }
-          part_code = parts[0].replace("ÇOD+", "").trim();
-          batch = parts[1].replace("LOT+", "").trim();
-          qty = parseFloat(parts[2].replace("QTY+", "").trim());
+      try {
+        let normalized = item.data
+          .toUpperCase()
+          .replace("ÇOD", "COD")
+          .replace(/´/g, "+");
+
+        const regex = /COD\+(\w+)\+LOT\+(\w+)\+QTY\+([\d.]+)/;
+        const match = normalized.match(regex);
+
+        if (match) {
+          part_code = match[1];
+          batch = match[2];
+          qty = parseFloat(match[3]);
 
           if (!part_code || isNaN(qty)) {
-            throw new Error("Código o cantidad inválida.");
+            throw new Error("Código de parte o cantidad inválida.");
           }
 
           if (entries.some((e) => e.batch === batch)) {
@@ -178,55 +204,47 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
           }
 
           setEntries((prev) => [...prev, { part_code, batch, qty }]);
-        } catch (err) {
-          setFeedback({
-            open: true,
-            message: err.message || "Formato de escaneo inválido.",
-            severity: "error",
-          });
-          return;
-        }
-      } else {
-        const parts = item.data.trim().split(" ");
-        if (parts.length === 3) {
-          part_code = parts[0];
-          batch = parts[1];
-          qty = parseFloat(parts[2]);
-        } else if (parts.length === 2) {
-          part_code = parts[0];
-          batch = "";
-          qty = parseFloat(parts[1]);
         } else {
-          setFeedback({
-            open: true,
-            message: "Formato inválido. No es posible agregar datos a la tabla",
-            severity: "error",
-          });
-          return;
-        }
+          const parts = normalized.trim().split(" ");
 
-        if (!part_code || isNaN(qty)) {
-          setFeedback({
-            open: true,
-            message: "Código de parte o cantidad inválida.",
-            severity: "error",
-          });
-          return;
-        }
+          if (parts.length === 3) {
+            part_code = parts[0];
+            batch = parts[1];
+            qty = parseFloat(parts[2]);
+          } else if (parts.length === 2) {
+            part_code = parts[0];
+            batch = "";
+            qty = parseFloat(parts[1]);
+          } else {
+            throw new Error(
+              "Formato inválido. No es posible agregar datos a la tabla"
+            );
+          }
 
-        if (batch && entries.some((e) => e.batch === batch)) {
-          setFeedback({
-            open: true,
-            message: `El lote ${batch} ya fue ingresado.`,
-            severity: "warning",
-          });
-          return;
-        }
+          if (!part_code || isNaN(qty)) {
+            throw new Error("Código de parte o cantidad inválida.");
+          }
 
-        setEntries((prev) => [...prev, { part_code, batch, qty }]);
+          if (batch && entries.some((e) => e.batch === batch)) {
+            setFeedback({
+              open: true,
+              message: `El lote ${batch} ya fue ingresado.`,
+              severity: "warning",
+            });
+            return;
+          }
+
+          setEntries((prev) => [...prev, { part_code, batch, qty }]);
+        }
+      } catch (err) {
+        setFeedback({
+          open: true,
+          message: err.message || "Formato de escaneo inválido.",
+          severity: "error",
+        });
+        return;
       }
     } else {
-      // Caso manual con inputs directos
       if (item.batch && entries.some((e) => e.batch === item.batch)) {
         setFeedback({
           open: true,

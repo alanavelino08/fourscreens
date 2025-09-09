@@ -322,6 +322,8 @@ class MaterialEntry(models.Model):
     STEP_VALIDATION_QUALITY = 2
     STEP_LIBERADO = 3
     STEP_FINALIZADO = 4
+    STEP_DETENIDO = 5
+    STEP_RECHAZADO = 6
 
     STEP_CHOICES = [
         (STEP_INGRESO, "Ingreso"),
@@ -329,6 +331,8 @@ class MaterialEntry(models.Model):
         (STEP_VALIDATION_QUALITY, "Validación Calidad"),
         (STEP_LIBERADO, "Liberado"),
         (STEP_FINALIZADO, "Finalizado"),
+        (STEP_DETENIDO, "Detenido"),
+        (STEP_RECHAZADO, "Rechazado"),
     ]
     
     cod_art = models.CharField(max_length=50)
@@ -382,8 +386,15 @@ class MaterialEntry(models.Model):
     released_at = models.DateTimeField(blank=True, null=True)
     #Red cone
     rejected_at = models.DateTimeField(blank=True, null=True)
+    is_rejected = models.BooleanField(default=False)
     
     delivered_at = models.DateTimeField(blank=True, null=True)
+    
+    removed_at = models.DateTimeField(blank=True, null=True)
+    #handle when the cone is red
+    comments = models.TextField(blank=True, null=True)
+    rma = models.BooleanField(default=False)
+    income = models.BooleanField(default=False)
     
     def __str__(self):
         return f"{self.cod_art} - {self.quantity} by {self.user}"

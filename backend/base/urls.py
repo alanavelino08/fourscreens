@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard, get_last_shipment, TransportViewSet, get_shipments_today_and_tomorrow, reset_password_direct, PartNumberSearch, ExcelUploadView, scan_pallet, location_status, delete_pallet, pallet_history, update_pallet_quantity, cargar_partes, MatchPedidoView, SaveMaterialEntryView, MaterialEntryListView, AdvanceMaterialEntryView, AdvanceYellowConeView, StepsListView, SaveMaterialWithdrawalView, MaterialWithdrawalSummaryView, ValidarDescargasView, FinalizeGreenConeView, BuyerMaterialRequestView, BuyerValidatePartView
+from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard, get_last_shipment, TransportViewSet, get_shipments_today_and_tomorrow, reset_password_direct, PartNumberSearch, ExcelUploadView, scan_pallet, location_status, delete_pallet, pallet_history, update_pallet_quantity, cargar_partes, MatchPedidoView, SaveMaterialEntryView, MaterialEntryListView, AdvanceMaterialEntryView, AdvanceYellowConeView, StepsListView, SaveMaterialWithdrawalView, MaterialWithdrawalSummaryView, ValidarDescargasView, FinalizeGreenConeView, BuyerMaterialRequestView, BuyerValidatePartView, BuyerListView, SendMailView, HandleRejectedEntryView
 from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
@@ -46,10 +46,13 @@ urlpatterns = [
     path('material-entry/<int:entry_id>/advance/', AdvanceMaterialEntryView.as_view()),
     path('material-entry/<int:entry_id>/advance-yellow/', AdvanceYellowConeView.as_view()),
     path("entries/<int:entry_id>/finalize-green/", FinalizeGreenConeView.as_view(), name="finalize-green-cone"),
+    path("material-entry/<int:entry_id>/handle-rejected/", HandleRejectedEntryView.as_view(), name="rejected-red-cone"),
     path('steps/', StepsListView.as_view(), name='steps-list'),
     path('save-material-withdrawal/', SaveMaterialWithdrawalView.as_view()),
     path('material-withdrawals-summary/', MaterialWithdrawalSummaryView.as_view()),
     path("validar-descargas/", ValidarDescargasView.as_view(), name="validar-descargas"),
     path("buyer-material-request/", BuyerMaterialRequestView.as_view(), name="hotlist-request"),
     path('buyer-validate-part/<str:cod_art>/', BuyerValidatePartView.as_view(), name='buyer-validate-part'),
+    path("buyers/", BuyerListView.as_view(), name="buyer-list"),
+    path("send-mail/", SendMailView.as_view(), name="send-mail"),
 ]

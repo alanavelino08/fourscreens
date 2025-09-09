@@ -25,6 +25,14 @@ import {
   Tooltip,
   FormGroup,
   FormControlLabel,
+  IconButton,
+  AppBar,
+  Toolbar,
+  Autocomplete,
+  FormControl,
+  FormLabel,
+  RadioGroup,
+  Radio,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -32,10 +40,12 @@ import ChangeHistoryIcon from "@mui/icons-material/ChangeHistory";
 import NewReleasesIcon from "@mui/icons-material/NewReleases";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import MarkEmailUnreadIcon from "@mui/icons-material/MarkEmailUnread";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import CloseIcon from "@mui/icons-material/Close";
 import api from "../../services/api";
 import { getCurrentUser } from "../../services/auth";
 
-const PedidoViewer = () => {
+const PedidoViewer = (open, entry) => {
   const [user, setUser] = useState(null);
   const [pedido, setPedido] = useState("");
   const [rows, setRows] = useState([]);
@@ -89,6 +99,7 @@ const PedidoViewer = () => {
           suppliers: item.suppliers,
           order: item.order,
           request_guide: item.request_guide,
+          invoice_number: item.invoice_number,
         }));
 
         setRows(formattedRows);
@@ -169,16 +180,83 @@ const PedidoViewer = () => {
     "Liberado",
     "Finalizado",
   ];
+
   const [entries, setEntries] = useState([]);
-  //const [dialogOpen, setDialogOpen] = useState(false);
   const [docDialogOpen, setDocDialogOpen] = useState(false); // para documentos
   const [materialDialogOpen, setMaterialDialogOpen] = useState(false); // para material
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false); // paara todos los detalles
+  const [mailDialogOpen, setMailDialogOpen] = useState(false);
+  const [rejectedDialogOpen, setRejectedDialogOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState(null);
 
   const [currentEntryId, setCurrentEntryId] = useState(null);
   const [isPo, setIsPo] = useState(false);
   const [isInvoice, setIsInvoice] = useState(false);
 
   const [currentStep, setCurrentStep] = useState(0);
+
+  // Función para mapear los pasos extra
+  // const mapStep = (current_step) => {
+  //   if (current_step === 6) {
+  //     return 0;
+  //   }
+  //   if (current_step === 5) {
+  //     return 0;
+  //   }
+  //   return current_step;
+  // };
+  const mapStep = (entry) => {
+    // protección contra entry indefinida (primer render, etc.)
+    if (!entry) return 0;
+
+    const {
+      cone,
+      is_pn_ok,
+      is_pn_supp_ok,
+      is_qty_ok,
+      is_label_attached,
+      validation_at,
+      current_step,
+    } = entry;
+
+    // Si está en CONO NEGRO -> quedarse en Ingreso (índice 0)
+    if (cone?.color === "black") {
+      return 0;
+    }
+
+    // Si está en CONO ROJO -> mostrar el paso donde se cayó:
+    if (cone?.color === "red") {
+      // Si pasó validación de material (tiene validation_at) o todos los checks de material son true
+      const materialChecks = [
+        is_pn_ok,
+        is_pn_supp_ok,
+        is_qty_ok,
+        is_label_attached,
+      ];
+      const allMaterialTrue = materialChecks.every(Boolean);
+
+      if (validation_at || allMaterialTrue) {
+        // Rechazado en calidad -> mantener en Validación Calidad (índice 2)
+        return 2;
+      } else {
+        // Rechazado en material -> mantenerse en Validación Material (índice 1)
+        return 1;
+      }
+    }
+
+    // CASOS NORMALES (cono blanco, amarillo, verde, etc.)
+    // Si el backend ya manda un current_step que encaje en 0..steps.length-1, úsalo
+    if (
+      typeof current_step === "number" &&
+      current_step >= 0 &&
+      current_step <= steps.length - 1
+    ) {
+      return current_step;
+    }
+
+    // Si el backend usa códigos mayores (ej. 5,6) o valores fuera de rango -> fallback seguro a Ingreso (0)
+    return 0;
+  };
 
   const visibleEntries = entries.filter((item) => !item.delivered_at);
 
@@ -196,6 +274,8 @@ const PedidoViewer = () => {
   const [validatedLabels, setValidatedLabels] = useState(false);
 
   const [guideInput, setGuideInput] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [supplierName, setSupplierName] = useState("");
   const currentEntry = entries.find((e) => e.id === currentEntryId);
 
   //Show all current lines to add in WH
@@ -240,7 +320,13 @@ const PedidoViewer = () => {
   //   return () => clearInterval(interval);
   // }, [docDialogOpen]);
   useEffect(() => {
-    if (docDialogOpen || materialDialogOpen || qualityDialogOpen) return;
+    if (
+      docDialogOpen ||
+      materialDialogOpen ||
+      qualityDialogOpen ||
+      rejectedDialogOpen
+    )
+      return;
 
     fetchEntries();
 
@@ -250,7 +336,12 @@ const PedidoViewer = () => {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [docDialogOpen, materialDialogOpen, qualityDialogOpen]);
+  }, [
+    docDialogOpen,
+    materialDialogOpen,
+    qualityDialogOpen,
+    rejectedDialogOpen,
+  ]);
 
   const colorMap = {
     white: "gray",
@@ -382,6 +473,115 @@ const PedidoViewer = () => {
     }
   };
 
+  //Correo
+  const [buyers, setBuyers] = useState([]);
+  const [to, setTo] = useState([]);
+  const [cc, setCc] = useState([
+    "c.ortiz@connectgroup.com",
+    "cgmg.incoming01.connectgroup.com",
+    "cgmg.incoming02.connectgroup.com",
+    "cgmg.incoming03.connectgroup.com",
+  ]);
+  const [subject, setSubject] = useState("");
+  const [content, setContent] = useState(
+    `Hola buen turno equipo de compras, 
+    
+    ¿Nos pueden apoyar con la resolución del siguiente problema? No tenemos la información completa para darle el ingreso y el material se encuentra en status de HOLDMAT
+
+    Problema: 
+    Proveedor: 
+    PO: 
+    Número de la factura: 
+    Números de parte: 
+
+    Gracias de antemano, quedamos en espera de su respuesta.`
+  );
+
+  // Fetch buyers on load
+  useEffect(() => {
+    if (open) {
+      api
+        .get("/buyers/")
+        .then((res) => setBuyers(res.data))
+        .catch((err) => console.error(err));
+    }
+  }, [open]);
+
+  // Generate subject based on selected entry
+  useEffect(() => {
+    if (selectedEntry) {
+      setSubject(
+        `PO: ${selectedEntry.order || ""} - N° de parte: ${
+          selectedEntry.cod_art
+        } - Guía: ${selectedEntry.request_guide}`
+      );
+    }
+  }, [selectedEntry]);
+
+  const handleSend = async () => {
+    try {
+      await api.post("/send-mail/", { to, subject, content });
+      setFeedback({
+        open: true,
+        message: "✅ Correo enviado a compras",
+        severity: "success",
+      });
+      setTo([]);
+      setMailDialogOpen(false);
+    } catch (err) {
+      console.error(err);
+      setFeedback({
+        open: true,
+        message: "❌ Error al enviar correo",
+        severity: "error",
+      });
+    }
+  };
+
+  const [rejectedOption, setRejectedOption] = useState("");
+  const [rejectedComment, setRejectedComment] = useState("");
+
+  const handleRejectedSubmit = async (entryId) => {
+    try {
+      const response = await api.post(
+        `/material-entry/${entryId}/handle-rejected/`,
+        {
+          option: rejectedOption,
+          comment: rejectedComment,
+          user: user?.id || null,
+        }
+      );
+
+      if (response.data.removed) {
+        // Caso RMA → eliminar de la vista
+        setEntries((prev) => prev.filter((e) => e.id !== entryId));
+      } else {
+        // Caso ingreso → actualizar con los datos devueltos
+        setEntries((prev) =>
+          prev.map((e) =>
+            e.id === entryId
+              ? {
+                  ...e,
+                  ...response.data,
+                  cone: {
+                    ...(e.cone || {}),
+                    color: response.data.cone || "yellow",
+                  },
+                  rejected_at: null,
+                }
+              : e
+          )
+        );
+      }
+
+      setRejectedDialogOpen(false);
+      setRejectedOption("");
+      setRejectedComment("");
+    } catch (err) {
+      console.error("Error al manejar rechazo:", err);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" gutterBottom>
@@ -445,7 +645,7 @@ const PedidoViewer = () => {
           <Grid container spacing={2}>
             {/* {sortedEntries.map((entry, index) => { */}
             {sortedEntries
-              .filter((entry) => !entry.delivered_at)
+              .filter((entry) => !entry.delivered_at && !entry.removed_at)
               .map((entry, index) => {
                 const color = entry.cone?.color || "white";
                 const isBlocked = sortedEntries.some(
@@ -517,10 +717,18 @@ const PedidoViewer = () => {
                             <strong>{entry.descrip}</strong>
                           </Typography>
 
-                          <Stepper
+                          <Stepper activeStep={mapStep(entry)} alternativeLabel>
+                            {steps.map((label) => (
+                              <Step key={label}>
+                                <StepLabel>{label}</StepLabel>
+                              </Step>
+                            ))}
+                          </Stepper>
+
+                          {/* <Stepper
                             activeStep={
                               typeof entry.current_step === "number"
-                                ? entry.current_step
+                                ? mapStep(entry.current_step)
                                 : 0
                             }
                             alternativeLabel
@@ -530,7 +738,21 @@ const PedidoViewer = () => {
                                 <StepLabel>{label}</StepLabel>
                               </Step>
                             ))}
-                          </Stepper>
+                          </Stepper> */}
+                          {/* <Stepper
+                            activeStep={
+                              typeof entry.current_step === "number"
+                                ? mapStep(entry)
+                                : 0
+                            }
+                            alternativeLabel
+                          >
+                            {steps.map((label) => (
+                              <Step key={label}>
+                                <StepLabel>{label}</StepLabel>
+                              </Step>
+                            ))}
+                          </Stepper> */}
 
                           {entry.released_at ? (
                             <Button
@@ -544,24 +766,27 @@ const PedidoViewer = () => {
                             >
                               Entregar
                             </Button>
+                          ) : entry.is_rejected ? (
+                            <Button
+                              variant="contained"
+                              color="error"
+                              onClick={() => {
+                                setCurrentEntryId(entry.id);
+                                setRejectedDialogOpen(true);
+                              }}
+                              sx={{ mt: 2 }}
+                            >
+                              Rechazado
+                            </Button>
                           ) : (
-                            // ) : entry.rejected_at ? (
-                            //   <Button
-                            //     variant="contained"
-                            //     color="error"
-                            //     // onClick={() => {
-                            //     //   handleRejected(entry.id);
-                            //     // }}
-                            //     sx={{ mt: 2 }}
-                            //   >
-                            //     Rechazado
-                            //   </Button>
-                            // )
                             <Button
                               variant="contained"
                               onClick={() => {
                                 setCurrentEntryId(entry.id);
                                 setIsPo(entry.is_po || false);
+                                setGuideInput(entry.guideInput || "");
+                                setInvoiceNumber(entry.invoiceNumber || "");
+                                setSupplierName(entry.supplierName || "");
                                 setIsInvoice(entry.is_invoice || false);
                                 setIsPnOk(entry.is_pn_ok || false);
                                 setIsPnSuppOk(entry.is_pn_supp_ok || false);
@@ -635,13 +860,42 @@ const PedidoViewer = () => {
                             </Button>
                           )}
 
+                          {/* <Tooltip title="Ver más detalles">
+                            <IconButton
+                              size="large"
+                              onClick={() => 
+                                setDetailsDialogOpen(true)}
+                            >
+                              <VisibilityIcon fontSize="inherit" />
+                            </IconButton>
+                          </Tooltip> */}
+                          <Tooltip title="Ver más detalles">
+                            <IconButton
+                              size="large"
+                              onClick={() => {
+                                setSelectedEntry(entry); // guardamos la info del entry actual
+                                setDetailsDialogOpen(true); // abrimos el diálogo
+                              }}
+                            >
+                              <VisibilityIcon fontSize="inherit" />
+                            </IconButton>
+                          </Tooltip>
+
                           {entry.cone?.color === "black" && (
                             <Typography
-                              color="warning.main"
-                              variant="body2"
-                              sx={{ mt: 1 }}
+                            // color="warning.main"
+                            // variant="body2"
+                            // sx={{ mt: 1 }}
                             >
-                              ⚠️ En espera de documentos - Cono negro asignado
+                              <Button
+                                color="error"
+                                onClick={() => {
+                                  setSelectedEntry(entry);
+                                  setMailDialogOpen(true);
+                                }}
+                              >
+                                ⚠️ En espera de documentos - Cono negro asignado
+                              </Button>
                             </Typography>
                           )}
                         </Grid>
@@ -655,139 +909,6 @@ const PedidoViewer = () => {
       </Accordion>
 
       {/* Document dialog */}
-      {/* <Dialog open={docDialogOpen} onClose={() => setDocDialogOpen(false)}>
-        <DialogTitle>Validación de Documentos</DialogTitle>
-        <DialogContent>
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isPo}
-                  onChange={(e) => setIsPo(e.target.checked)}
-                />
-              }
-              label="PO recibido"
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isInvoice}
-                  onChange={(e) => setIsInvoice(e.target.checked)}
-                />
-              }
-              label="Factura recibida"
-            />
-          </FormGroup>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDocDialogOpen(false)}>Cancelar</Button>
-          <Button
-            variant="contained"
-            onClick={async () => {
-              setLoading(true);
-              try {
-                const res = await api.post(
-                  `/material-entry/${currentEntryId}/advance/`,
-                  { is_po: isPo, is_invoice: isInvoice }
-                );
-                setFeedback({
-                  open: true,
-                  message: "Se avanzó de flujo correctamente",
-                  severity: "success",
-                });
-                await fetchEntries();
-                setDocDialogOpen(false);
-                if (res.data?.current_step !== undefined)
-                  setCurrentStep(res.data.current_step);
-              } catch (error) {
-                console.error("Error al avanzar paso:", error);
-                setFeedback({
-                  open: true,
-                  message: "Error al avanzar de flujo",
-                  severity: "error",
-                });
-              } finally {
-                setLoading(false);
-              }
-            }}
-          >
-            Confirmar
-          </Button>
-        </DialogActions>
-      </Dialog> */}
-      {/* <Dialog open={docDialogOpen} onClose={() => setDocDialogOpen(false)}>
-        <DialogTitle>
-          Validación de Documentos -
-          {currentEntry?.request_guide && (
-            <span
-              style={{
-                fontWeight: "normal",
-                fontSize: "0.9rem",
-                marginLeft: "8px",
-              }}
-            >
-              N° Guía: {currentEntry.request_guide}
-            </span>
-          )}
-        </DialogTitle>
-        <DialogContent>
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isPo}
-                  onChange={(e) => setIsPo(e.target.checked)}
-                />
-              }
-              label="PO recibido"
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isInvoice}
-                  onChange={(e) => setIsInvoice(e.target.checked)}
-                />
-              }
-              label="Factura recibida"
-            />
-          </FormGroup>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDocDialogOpen(false)}>Cancelar</Button>
-          <Button
-            variant="contained"
-            onClick={async () => {
-              setLoading(true);
-              try {
-                const res = await api.post(
-                  `/material-entry/${currentEntryId}/advance/`,
-                  { is_po: isPo, is_invoice: isInvoice }
-                );
-                setFeedback({
-                  open: true,
-                  message: "Se avanzó de flujo correctamente",
-                  severity: "success",
-                });
-                await fetchEntries();
-                setDocDialogOpen(false);
-                if (res.data?.current_step !== undefined)
-                  setCurrentStep(res.data.current_step);
-              } catch (error) {
-                console.error("Error al avanzar paso:", error);
-                setFeedback({
-                  open: true,
-                  message: "Error al avanzar de flujo",
-                  severity: "error",
-                });
-              } finally {
-                setLoading(false);
-              }
-            }}
-          >
-            Confirmar
-          </Button>
-        </DialogActions>
-      </Dialog> */}
       <Dialog open={docDialogOpen} onClose={() => setDocDialogOpen(false)}>
         <DialogTitle>
           Validación de Documentos{" "}
@@ -805,8 +926,7 @@ const PedidoViewer = () => {
         </DialogTitle>
 
         <DialogContent>
-          {/* Si no hay request_guide mostrar input */}
-          {/* {!currentEntry?.request_guide && (
+          {!currentEntry?.request_guide && (
             <TextField
               fullWidth
               label="Ingresa N° de guía"
@@ -814,7 +934,27 @@ const PedidoViewer = () => {
               onChange={(e) => setGuideInput(e.target.value)}
               margin="normal"
             />
-          )} */}
+          )}
+
+          {!currentEntry?.invoice_number && (
+            <TextField
+              fullWidth
+              label="Ingresa N° de factura"
+              value={invoiceNumber}
+              onChange={(e) => setInvoiceNumber(e.target.value)}
+              margin="normal"
+            />
+          )}
+
+          {!currentEntry?.supplier_name && (
+            <TextField
+              fullWidth
+              label="Ingresa P/N proveedor"
+              value={supplierName}
+              onChange={(e) => setSupplierName(e.target.value)}
+              margin="normal"
+            />
+          )}
 
           <FormGroup>
             <FormControlLabel
@@ -850,10 +990,18 @@ const PedidoViewer = () => {
                   is_invoice: isInvoice,
                 };
 
-                // // si no existe en la DB y el usuario lo ingresó, enviarlo
-                // if (!currentEntry?.request_guide && guideInput.trim()) {
-                //   payload.request_guide = guideInput.trim();
-                // }
+                // si no existe en la DB y el usuario lo ingresó, enviarlo
+                if (!currentEntry?.request_guide && guideInput.trim()) {
+                  payload.request_guide = guideInput.trim();
+                }
+
+                if (!currentEntry?.supplier_name && supplierName.trim()) {
+                  payload.supplier_name = supplierName.trim();
+                }
+
+                if (!currentEntry?.invoice_number && invoiceNumber.trim()) {
+                  payload.invoice_number = invoiceNumber.trim();
+                }
 
                 const res = await api.post(
                   `/material-entry/${currentEntryId}/advance/`,
@@ -966,12 +1114,16 @@ const PedidoViewer = () => {
                     is_label_attached: isLabelAttached,
                   }
                 );
+
+                const allTrue =
+                  isPnOk && isPnSuppOk && isQtyOk && isLabelAttached;
+
                 setFeedback({
                   open: true,
-                  message: isWarehouseUser
+                  message: allTrue
                     ? "Validación de material completada. Pendiente validación de calidad."
-                    : "Validación de material completada",
-                  severity: "success",
+                    : "❌ Material rechazado",
+                  severity: allTrue ? "success" : "error",
                 });
                 await fetchEntries();
                 setMaterialDialogOpen(false);
@@ -1087,6 +1239,250 @@ const PedidoViewer = () => {
             }}
           >
             Confirmar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Ver todos los detalles */}
+      <Dialog
+        open={detailsDialogOpen}
+        onClose={() => setDetailsDialogOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Detalles del material</DialogTitle>
+        <DialogContent dividers>
+          {selectedEntry ? (
+            <Box
+              component="form"
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: 2,
+                mt: 1,
+              }}
+            >
+              <TextField
+                label="N° de parte"
+                value={selectedEntry.cod_art || ""}
+                disabled
+                fullWidth
+                variant="filled"
+              />
+              <TextField
+                label="N° de Proveedor"
+                value={selectedEntry.supplier_name || ""}
+                disabled
+                fullWidth
+                variant="filled"
+              />
+              <TextField
+                label="Descripción"
+                value={selectedEntry.descrip || ""}
+                disabled
+                fullWidth
+                variant="filled"
+              />
+              <TextField
+                label="Cantidad"
+                value={selectedEntry.quantity || ""}
+                disabled
+                fullWidth
+                variant="filled"
+              />
+              <TextField
+                label="Proveedor"
+                value={selectedEntry.supplier_company || ""}
+                disabled
+                fullWidth
+                multiline
+                variant="filled"
+              />
+              <TextField
+                label="Orden (PO)"
+                value={selectedEntry.order || ""}
+                disabled
+                fullWidth
+                multiline
+                variant="filled"
+              />
+              <TextField
+                label="Guia"
+                value={selectedEntry.request_guide || ""}
+                disabled
+                fullWidth
+                multiline
+                variant="filled"
+              />
+              <TextField
+                label="Paquetería"
+                value={selectedEntry.parcel_service || ""}
+                disabled
+                fullWidth
+                multiline
+                variant="filled"
+              />
+              <TextField
+                label="Factura"
+                value={selectedEntry.invoice_number || ""}
+                disabled
+                fullWidth
+                multiline
+                variant="filled"
+              />
+              <TextField
+                label="Ingresado por"
+                value={
+                  selectedEntry.user
+                    ? `${selectedEntry.user.first_name} ${selectedEntry.user.last_name}`
+                    : "En espera"
+                }
+                disabled
+                fullWidth
+                variant="filled"
+              />
+              <TextField
+                label="creado por"
+                value={
+                  selectedEntry.created_by
+                    ? `${selectedEntry.created_by.first_name} ${selectedEntry.created_by.last_name}`
+                    : "No creado por compras"
+                }
+                disabled
+                fullWidth
+                variant="filled"
+              />
+              <TextField
+                label="Fecha de ingreso"
+                value={new Date(selectedEntry.created_at).toLocaleString(
+                  "es-MX"
+                )}
+                disabled
+                fullWidth
+                variant="filled"
+              />
+            </Box>
+          ) : (
+            <Typography>No hay datos disponibles</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsDialogOpen(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialogo para mandar correo */}
+      <Dialog
+        fullScreen
+        open={mailDialogOpen}
+        onClose={() => setMailDialogOpen(false)}
+      >
+        <AppBar sx={{ position: "relative" }}>
+          <Toolbar>
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={() => {
+                setMailDialogOpen(false);
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              Enviar correo a compras
+            </Typography>
+            <Button autoFocus color="inherit" onClick={handleSend}>
+              Enviar
+            </Button>
+          </Toolbar>
+        </AppBar>
+
+        <Box sx={{ p: 3 }}>
+          {/* Campo TO */}
+          <Autocomplete
+            multiple
+            options={buyers}
+            value={to}
+            onChange={(e, newValue) => setTo(newValue)}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Para"
+                placeholder="Selecciona compradores"
+              />
+            )}
+            sx={{ mb: 2 }}
+          />
+
+          {/* Campo CC */}
+          <TextField
+            fullWidth
+            label="CC"
+            value={cc.join(", ")}
+            disabled
+            sx={{ mb: 2 }}
+          />
+
+          {/* Campo Subject */}
+          <TextField
+            fullWidth
+            label="Asunto"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+
+          {/* Campo Content */}
+          <TextField
+            fullWidth
+            label="Contenido"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            multiline
+            rows={12}
+          />
+        </Box>
+      </Dialog>
+
+      <Dialog
+        open={rejectedDialogOpen}
+        onClose={() => setRejectedDialogOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>¿Qué deseas hacer?</DialogTitle>
+
+        <DialogContent dividers>
+          <TextField
+            fullWidth
+            label="Comentario"
+            multiline
+            rows={6}
+            value={rejectedComment}
+            onChange={(e) => setRejectedComment(e.target.value)}
+          />
+          <FormControl>
+            <RadioGroup
+              row
+              value={rejectedOption}
+              onChange={(e) => setRejectedOption(e.target.value)}
+            >
+              <FormControlLabel value="rma" control={<Radio />} label="RMA" />
+              <FormControlLabel
+                value="income"
+                control={<Radio />}
+                label="INGRESO"
+              />
+            </RadioGroup>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectedDialogOpen(false)}>Cerrar</Button>
+          <Button
+            onClick={() => handleRejectedSubmit(currentEntryId)} // <-- ahora sí le pasamos el id
+            disabled={!rejectedOption}
+          >
+            Enviar opción
           </Button>
         </DialogActions>
       </Dialog>

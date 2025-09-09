@@ -173,6 +173,7 @@ class ConeSerializer(serializers.ModelSerializer):
 class MaterialEntrySerializer(serializers.ModelSerializer):
     step_label = serializers.SerializerMethodField()
     user = UserSerializer(read_only=True)
+    created_by = UserSerializer(read_only=True)
     cone = ConeSerializer()
 
     class Meta:
