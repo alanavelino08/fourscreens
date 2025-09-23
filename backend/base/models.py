@@ -340,6 +340,7 @@ class MaterialEntry(models.Model):
     quantity = models.PositiveIntegerField()
     supplier_name = models.CharField(max_length=200)
     current_step = models.IntegerField(choices=STEP_CHOICES, default=STEP_INGRESO)
+    previous_step = models.CharField(max_length=50, choices=STEP_CHOICES, null=True, blank=True)
     
     #Buyer's form
     supplier_company = models.CharField(max_length=200, blank=True, null=True)
@@ -361,6 +362,7 @@ class MaterialEntry(models.Model):
     is_qty_ok = models.BooleanField(default=False)
     date_code = models.CharField(max_length=20, blank=True, null=True)
     is_label_attached = models.BooleanField(default=False)
+    is_expired = models.BooleanField(default=False) 
     
     #Second steps
     measures = models.BooleanField(default=False)

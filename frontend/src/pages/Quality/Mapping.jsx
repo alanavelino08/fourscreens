@@ -33,6 +33,7 @@ import {
   FormLabel,
   RadioGroup,
   Radio,
+  InputLabel,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -44,6 +45,9 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "../../services/api";
 import { getCurrentUser } from "../../services/auth";
+import dayjs from "dayjs";
+import isoWeek from "dayjs/plugin/isoWeek";
+dayjs.extend(isoWeek);
 
 const PedidoViewer = (open, entry) => {
   const [user, setUser] = useState(null);
@@ -304,21 +308,6 @@ const PedidoViewer = (open, entry) => {
     }
   };
 
-  // useEffect(() => {
-  //   fetchEntries();
-  // }, []);
-  // useEffect(() => {
-  //   if (docDialogOpen) return;
-
-  //   fetchEntries();
-
-  //   const interval = setInterval(() => {
-  //     console.log("Ejecutando intervalo...");
-  //     fetchEntries();
-  //   }, 10000); // cada 10 segundos
-
-  //   return () => clearInterval(interval);
-  // }, [docDialogOpen]);
   useEffect(() => {
     if (
       docDialogOpen ||
@@ -581,6 +570,85 @@ const PedidoViewer = (open, entry) => {
       console.error("Error al manejar rechazo:", err);
     }
   };
+
+  //Datecode validation
+  const [shelfLife, setShelfLife] = useState("");
+  const [calcResult, setCalcResult] = useState(null);
+  const [isExpired, setIsExpired] = useState(false);
+
+  const handleCalculate = () => {
+    const result = getExpiration(dateCode, shelfLife);
+    setCalcResult(result.message);
+    setIsExpired(result.expired);
+  };
+
+  function isoWeekStart(year, week) {
+    const jan4 = new Date(year, 0, 4);
+    const day = jan4.getDay();
+    const isoWeekday = day === 0 ? 7 : day;
+    const mondayOfWeek1 = new Date(jan4);
+    mondayOfWeek1.setDate(jan4.getDate() - (isoWeekday - 1));
+    const target = new Date(mondayOfWeek1);
+    target.setDate(mondayOfWeek1.getDate() + (week - 1) * 7);
+    return target;
+  }
+
+  function getExpiration(code, years) {
+    let baseDate = null;
+
+    // YYYYMMDD
+    if (/^\d{8}$/.test(code)) {
+      baseDate = dayjs(code, "YYYYMMDD");
+    }
+    // YYWW  (ej: "2323" -> yy=23, ww=23)
+    else if (/^\d{4}$/.test(code)) {
+      const yy = parseInt(code.slice(0, 2), 10);
+      const ww = parseInt(code.slice(2, 4), 10);
+
+      if (ww < 1 || ww > 53) {
+        return { message: "⚠️ Semana inválida", expired: true };
+      }
+
+      let year = 2000 + yy;
+
+      const monday = isoWeekStart(year, ww);
+      baseDate = dayjs(monday);
+    }
+    // YYYYMM
+    else if (/^\d{6}$/.test(code)) {
+      baseDate = dayjs(code, "YYYYMM");
+    }
+
+    if (!baseDate || !baseDate.isValid()) {
+      return { message: "⚠️ Formato inválido", expired: true };
+    }
+
+    const expDate = baseDate.add(years, "year");
+    const now = dayjs();
+
+    if (expDate.isAfter(now)) {
+      return {
+        message: `✅ Vigente. Fecha fabricación: ${baseDate.format(
+          "YYYY-MM-DD"
+        )}. Vence: ${expDate.format("YYYY-MM-DD")}`,
+        expired: false,
+      };
+    } else {
+      return {
+        message: `❌ Expirado. Fecha fabricación: ${baseDate.format(
+          "YYYY-MM-DD"
+        )}. Venció: ${expDate.format("YYYY-MM-DD")}`,
+        expired: true,
+      };
+    }
+  }
+
+  useEffect(() => {
+    if (materialDialogOpen) {
+      setCalcResult(null);
+      setIsExpired(false);
+    }
+  }, [materialDialogOpen]);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -1075,14 +1143,58 @@ const PedidoViewer = (open, entry) => {
               }
               label="Cantidad correcta"
             />
-            <TextField
+            {/* <TextField
               label="Date Code"
               value={dateCode}
               onChange={(e) => setDateCode(e.target.value)}
               fullWidth
               margin="dense"
               disabled={!isWarehouseUser}
-            />
+            /> */}
+            <Box display="flex" alignItems="center" gap={2} mt={1}>
+              <TextField
+                label="Date Code"
+                value={dateCode}
+                onChange={(e) => setDateCode(e.target.value)}
+                fullWidth
+                margin="dense"
+                disabled={!isWarehouseUser}
+              />
+              <FormControl sx={{ minWidth: 100 }}>
+                <InputLabel>Vida útil</InputLabel>
+                <Select
+                  value={shelfLife}
+                  onChange={(e) => setShelfLife(e.target.value)}
+                  disabled={!isWarehouseUser}
+                >
+                  <MenuItem value={2}>2 años</MenuItem>
+                  <MenuItem value={5}>5 años</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+
+            {/* Botón para calcular después de los inputs */}
+            <Box mt={2}>
+              <Button
+                variant="outlined"
+                onClick={handleCalculate}
+                disabled={!isWarehouseUser || !dateCode || !shelfLife}
+              >
+                Calcular vencimiento
+              </Button>
+            </Box>
+
+            {/* Mostrar resultado */}
+            {calcResult && (
+              <Typography
+                variant="body2"
+                sx={{ mt: 1 }}
+                color={isExpired ? "error" : "success.main"}
+              >
+                {calcResult}
+              </Typography>
+            )}
+
             <FormControlLabel
               control={
                 <Checkbox
@@ -1112,11 +1224,16 @@ const PedidoViewer = (open, entry) => {
                     is_qty_ok: isQtyOk,
                     date_code: dateCode,
                     is_label_attached: isLabelAttached,
+                    is_expired: isExpired,
                   }
                 );
 
                 const allTrue =
-                  isPnOk && isPnSuppOk && isQtyOk && isLabelAttached;
+                  isPnOk &&
+                  isPnSuppOk &&
+                  isQtyOk &&
+                  isLabelAttached &&
+                  !isExpired;
 
                 setFeedback({
                   open: true,

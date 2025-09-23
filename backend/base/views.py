@@ -751,70 +751,6 @@ class SaveMaterialWithdrawalView(APIView):
             "order_number": production_order.order_number,
             "entries": saved_entries
         }, status=status.HTTP_201_CREATED)
-# class SaveMaterialWithdrawalView(APIView):
-#     def post(self, request):
-#         order_number = request.data.get("order_number")
-#         scanned_lines = request.data.get("lines", [])
-
-#         if not order_number:
-#             return Response({"error": "order_number es requerido"}, status=status.HTTP_400_BAD_REQUEST)
-
-#         if not scanned_lines:
-#             return Response({"error": "No se enviaron líneas para registrar"}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Buscar o crear la orden de producción
-#         production_order, _ = ProductionOrder.objects.get_or_create(order_number=order_number)
-
-#         saved_entries = []
-#         for line in scanned_lines:
-#             try:
-#                 line = line.strip()
-
-#                 # 🔹 Normalizar línea (acepta ÇOD, + o ´ como separador)
-#                 normalized = line.replace("ÇOD", "COD").replace("´", "+")
-
-#                 # 🔹 Caso escaneado
-#                 match = re.search(r"COD\+(\w+)\+LOT\+(\w+)\+QTY\+([\d\.]+)", normalized)
-#                 if match:
-#                     part_code = match.group(1)
-#                     batch = match.group(2)
-#                     qty = float(match.group(3))
-#                 else:
-#                     # 🔹 Caso manual -> formato: "3040143 003455053 192" o "3040143 192"
-#                     parts = line.split()
-#                     if len(parts) == 3:
-#                         part_code, batch, qty = parts[0], parts[1], float(parts[2])
-#                     elif len(parts) == 2:
-#                         part_code, qty = parts[0], float(parts[1])
-#                         batch = None   # batch opcional
-#                     else:
-#                         raise ValueError("Formato inválido. Usa: 'COD+part+LOT+batch+QTY+qty', 'part batch qty' o 'part qty'")
-
-#                 # Guardar en BD
-#                 withdrawal = MaterialWithdrawal.objects.create(
-#                     production_order=production_order,
-#                     part_code=part_code,
-#                     batch=batch,
-#                     qty=qty,
-#                     user_out_material=request.user
-#                 )
-#                 saved_entries.append({
-#                     "part_code": part_code,
-#                     "batch": batch,
-#                     "qty": qty
-#                 })
-
-#             except (IndexError, ValueError, ValidationError) as e:
-#                 return Response(
-#                     {"error": f"Error procesando línea '{line}': {str(e)}"},
-#                     status=status.HTTP_400_BAD_REQUEST
-#                 )
-
-#         return Response({
-#             "message": f"Se registraron {len(saved_entries)} retiros de material",
-#             "order_number": production_order.order_number,
-#             "entries": saved_entries
-#         }, status=status.HTTP_201_CREATED)
 
         
 class MaterialWithdrawalSummaryView(APIView):
@@ -1108,13 +1044,15 @@ class AdvanceMaterialEntryView(APIView):
 
         entry.is_po = request.data.get("is_po", False)
         entry.is_invoice = request.data.get("is_invoice", False)
-        #entry.request_guide = request.data.get("request_guide", "")
-        #entry.supplier_name = request.data.get("supplier_name", "")
 
         # decidir nuevo color y current_step
         if entry.is_po and entry.is_invoice:
             new_color = "yellow"
             entry.document_validation = timezone.now()
+           
+            if entry.current_step == MaterialEntry.STEP_INGRESO:
+                entry.previous_step = MaterialEntry.STEP_VALIDATION_MATERIAL
+            
             entry.current_step = MaterialEntry.STEP_VALIDATION_MATERIAL
             
             if not entry.user:
@@ -1125,9 +1063,52 @@ class AdvanceMaterialEntryView(APIView):
                 entry.supplier_name = request.data.get("supplier_name", "")
             if not entry.invoice_number: 
                 entry.invoice_number = request.data.get("invoice_number", "")
+                
+            if entry.created_by:
+                po = entry.order
+                guide = entry.request_guide
+                invoice = entry.invoice_number
+                part_number = entry.cod_art
+                creator_email = entry.created_by.email
+                first_name = entry.created_by.first_name
+                last_name = entry.created_by.last_name
+                
+                full_name = f"{first_name} {last_name}"
+                
+                to_emails = [creator_email]
+                
+                html_content = f""" 
+                <h4>Hola, {full_name}</h4>
+                
+                <p>
+                Para informarle que su request del material <strong>{part_number}</strong> con N° de factura <strong>({invoice})</strong>
+                PO <strong>{po}</strong> y N° de guía <strong>{guide}</strong> ha sido ingresado correctamente.
+                </p>
+                
+                <p>
+                Gracias y saludos.
+                </p>
+                """
+                try:
+                    email = EmailMessage(
+                        subject=f"Material {part_number} con N° de factura ({invoice}) ingresado con éxito",
+                        body=html_content,
+                        from_email=None,
+                        to=to_emails
+                    )
+                    email.content_subtype = "html"
+                    email.send(fail_silently=False)
+                except Exception as e:
+                    return Response(
+                        {"warning": f"Error al enviar el correo: {str(e)}"},
+                        status=status.HTTP_207_MULTI_STATUS
+                    )
+                
         else:
             new_color = "black"
             entry.onhold_at = timezone.now()
+            if entry.current_step == MaterialEntry.STEP_INGRESO:
+                entry.previous_step = MaterialEntry.STEP_INGRESO
             entry.current_step = MaterialEntry.STEP_DETENIDO
             
             if not entry.user:
@@ -1180,20 +1161,28 @@ class AdvanceYellowConeView(APIView):
             entry.is_qty_ok = request.data.get("is_qty_ok", False)
             entry.date_code = request.data.get("date_code", "")
             entry.is_label_attached = request.data.get("is_label_attached", False)
+            entry.is_expired = request.data.get("is_expired", False)
 
             if not all([
                 entry.is_pn_ok,
                 entry.is_pn_supp_ok,
                 entry.is_qty_ok,
-                entry.is_label_attached
+                entry.is_label_attached,
+                not entry.is_expired
             ]):
                 new_color = "red"
                 entry.is_rejected = True
                 entry.rejected_at = timezone.now()
+                #entry.previous_step = entry.current_step
+                #entry.current_step = MaterialEntry.STEP_RECHAZADO
+                if entry.current_step == MaterialEntry.STEP_VALIDATION_MATERIAL:
+                    entry.previous_step = MaterialEntry.STEP_VALIDATION_MATERIAL
                 entry.current_step = MaterialEntry.STEP_RECHAZADO
             else:
                 new_color = "yellow"
                 entry.validation_at = timezone.now()
+                if entry.current_step == MaterialEntry.STEP_VALIDATION_MATERIAL:
+                    entry.previous_step = MaterialEntry.STEP_VALIDATION_MATERIAL
                 entry.current_step = MaterialEntry.STEP_VALIDATION_QUALITY
                 entry.save()
                 return Response(
@@ -1216,6 +1205,7 @@ class AdvanceYellowConeView(APIView):
                 new_color = "red"
                 entry.is_rejected = True
                 entry.rejected_at = timezone.now()
+                entry.previous_step = entry.current_step
                 entry.current_step = MaterialEntry.STEP_RECHAZADO
             else:
                 new_color = "green"
@@ -1268,6 +1258,8 @@ class FinalizeGreenConeView(APIView):
             entry.cone = None
 
         # Cambiar estado a finalizado y registrar hora de entrega
+        if entry.current_step == MaterialEntry.STEP_LIBERADO:
+            entry.previous_step = MaterialEntry.STEP_LIBERADO
         entry.current_step = MaterialEntry.STEP_FINALIZADO
         entry.delivered_at = timezone.now()
         entry.save()
@@ -1290,7 +1282,7 @@ class HandleRejectedEntryView(APIView):
         if not entry.cone or entry.cone.color != "red":
             return Response({"detail": "El material no está en cono rojo"}, status=400)
 
-        option = request.data.get("option")  # "rma" o "income"
+        option = request.data.get("option")
         comment = request.data.get("comment", "")
 
         entry.comments = comment
@@ -1313,10 +1305,11 @@ class HandleRejectedEntryView(APIView):
             entry.income = True
             entry.is_rejected = False
             #entry.current_step = MaterialEntry.STEP_VALIDATION_MATERIAL
-            if entry.current_step <= MaterialEntry.STEP_VALIDATION_MATERIAL:
-                entry.current_step = MaterialEntry.STEP_VALIDATION_MATERIAL
+            if entry.previous_step:
+                entry.current_step = entry.previous_step
+                #entry.previous_step = None  # lo limpiamos
             else:
-                entry.current_step = MaterialEntry.STEP_VALIDATION_QUALITY
+                entry.current_step = MaterialEntry.STEP_VALIDATION_MATERIAL
 
             # Asignar cono amarillo disponible
             new_cone = Cone.objects.filter(color="yellow", is_assigned=False).first()

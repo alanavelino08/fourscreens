@@ -382,7 +382,7 @@ const ScanPallet = () => {
     <Box
       sx={{
         p: 3,
-        maxWidth: 600,
+        maxWidth: 1024,
         mx: "auto",
         display: "flex",
         flexDirection: "column",
@@ -589,47 +589,11 @@ const ScanPallet = () => {
             </Grid>
           ))}
         </Grid> */}
-        {Object.entries(groupedByRack).map(([rackName, rackLocations]) => (
+        {/* {Object.entries(groupedByRack).map(([rackName, rackLocations]) => (
           <Accordion key={rackName}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography sx={{ fontWeight: "bold" }}>{rackName}</Typography>
             </AccordionSummary>
-            {/* <AccordionDetails>
-              <Grid container spacing={2}>
-                {rackLocations.map((loc, index) => (
-                  <Grid item xs={12} sm={6} md={4} lg={2} key={index}>
-                    <Paper
-                      onClick={() => handleLocationClick(loc)}
-                      elevation={3}
-                      sx={{
-                        p: 2,
-                        textAlign: "center",
-                        backgroundColor: getColor(
-                          loc.pallet_count,
-                          loc.total_quantity
-                        ),
-                        color: "#fff",
-                        fontWeight: "bold",
-                        borderRadius: "8px",
-                        cursor: "pointer",
-                        transition: "0.2s",
-                        "&:hover": {
-                          transform: "scale(1.03)",
-                        },
-                      }}
-                    >
-                      {loc.code_location}
-                      <Typography variant="body2">
-                        {loc.pallet_count} N/P
-                      </Typography>
-                      <Typography variant="body2">
-                        {loc.total_quantity} piezas
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                ))}
-              </Grid>
-            </AccordionDetails> */}
             <AccordionDetails>
               <Box
                 sx={{
@@ -679,7 +643,92 @@ const ScanPallet = () => {
               </Box>
             </AccordionDetails>
           </Accordion>
-        ))}
+        ))} */}
+        {Object.entries(groupedByRack).map(([rackName, rackLocations]) => {
+          // niveles según rack
+          const totalLevels = rackName === "Rack 4" ? 5 : 6;
+
+          // calcular columnas máximas
+          const maxCol = Math.max(
+            ...rackLocations.map((loc) => {
+              const code = loc.code_location;
+              if (rackName === "Rack 4") {
+                return parseInt(code.slice(2, 4), 10); // ej. "040301" → col 03
+              } else {
+                return parseInt(code.match(/AV[A-Z](\d{2})/)[1], 10); // ej. "AVI01'1" → 01
+              }
+            })
+          );
+
+          return (
+            <Accordion key={rackName}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography sx={{ fontWeight: "bold" }}>{rackName}</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${maxCol}, 1fr)`,
+                    gridTemplateRows: `repeat(${totalLevels}, 100px)`,
+                    gap: 2,
+                    overflowX: "auto", // scroll horizontal si son muchas columnas
+                  }}
+                >
+                  {rackLocations.map((loc) => {
+                    const code = loc.code_location;
+
+                    let col, level;
+
+                    if (rackName === "Rack 4") {
+                      col = parseInt(code.slice(2, 4), 10); // columna
+                      level = parseInt(code.slice(4, 6), 10); // nivel 01..05
+                    } else {
+                      const match = code.match(/AV[A-Z](\d{2})'(\d)/);
+                      if (match) {
+                        col = parseInt(match[1], 10); // "01".."64"
+                        level = parseInt(match[2], 10); // "1".."6"
+                      }
+                    }
+
+                    const row = totalLevels + 1 - level; // invertir: 1 abajo, N arriba
+
+                    return (
+                      <Box
+                        key={loc.code_location}
+                        sx={{
+                          gridColumn: col,
+                          gridRow: row,
+                          p: 2,
+                          textAlign: "center",
+                          backgroundColor: getColor(
+                            loc.pallet_count,
+                            loc.total_quantity
+                          ),
+                          color: "#fff",
+                          fontWeight: "bold",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          transition: "0.2s",
+                          "&:hover": { transform: "scale(1.03)" },
+                        }}
+                        onClick={() => handleLocationClick(loc)}
+                      >
+                        {loc.code_location}
+                        <Typography variant="body2">
+                          {loc.pallet_count} N/P
+                        </Typography>
+                        <Typography variant="body2">
+                          {loc.total_quantity} piezas
+                        </Typography>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+          );
+        })}
 
         <Dialog
           open={dialogOpen}
