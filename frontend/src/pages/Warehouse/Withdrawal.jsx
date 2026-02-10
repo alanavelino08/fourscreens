@@ -16,6 +16,7 @@ import {
   AccordionSummary,
   AccordionDetails,
   Typography,
+  CircularProgress,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -349,6 +350,7 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
   });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingfile, setLoadingfile] = useState(false);
 
   // Definición de columnas
   const columns = [
@@ -458,36 +460,6 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
     }
   };
 
-  // const handleDownloadExcel = async () => {
-  //   try {
-  //     const response = await api.get(
-  //       `/validar-descargas/?date=${filters.date}&export=1`,
-  //       { responseType: "blob" }
-  //     );
-
-  //     const blob = new Blob([response.data], {
-  //       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  //     });
-  //     const url = window.URL.createObjectURL(blob);
-
-  //     const link = document.createElement("a");
-  //     link.href = url;
-  //     link.setAttribute("download", `validacion_${filters.date}.xlsx`);
-  //     document.body.appendChild(link);
-  //     link.click();
-  //     link.remove();
-  //     window.URL.revokeObjectURL(url);
-
-  //     setFeedback({
-  //       open: true,
-  //       message: "Archivo descargado correctamente",
-  //       severity: "success",
-  //     });
-  //   } catch (error) {
-  //     console.error("Error en la descarga:", error);
-  //   }
-  // };
-
   const handleDownloadExcel = async () => {
     if (!filters.date) {
       setFeedback({
@@ -497,6 +469,8 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
       });
       return;
     }
+
+    setLoadingfile(true);
 
     try {
       const params = new URLSearchParams();
@@ -535,6 +509,8 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
         message: "Error en la descarga",
         severity: "error",
       });
+    } finally {
+      setLoadingfile(false);
     }
   };
 
@@ -693,10 +669,14 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
               />
               <TextField
                 label="Fecha (YYYY-MM-DD)"
+                type="date"
                 value={filters.date}
                 onChange={(e) =>
                   setFilters({ ...filters, date: e.target.value })
                 }
+                InputLabelProps={{
+                  shrink: true,
+                }}
               />
               <Button
                 variant="contained"
@@ -720,8 +700,14 @@ const MaterialWithdrawal = ({ fetchWithdrawals }) => {
                 variant="contained"
                 color="success"
                 onClick={handleDownloadExcel}
+                disabled={loadingfile}
+                startIcon={
+                  loadingfile ? (
+                    <CircularProgress size={20} color="inherit" />
+                  ) : null
+                }
               >
-                Validar descargas
+                {loadingfile ? "Descargando..." : "Validar descargas"}
               </Button>
             </Box>
 

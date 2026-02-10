@@ -11,6 +11,8 @@ import {
   Paper,
   Typography,
   Snackbar,
+  Alert,
+  TablePagination,
 } from "@mui/material";
 import api from "../../services/api";
 import { makeStyles } from "@mui/styles";
@@ -30,6 +32,12 @@ export default function PalletHistoryTable() {
   const [search, setSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // 🔹 Estados para la paginación
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
   const [feedback, setFeedback] = useState({
     open: false,
     message: "",
@@ -38,7 +46,9 @@ export default function PalletHistoryTable() {
 
   const handleClose = () => setFeedback({ ...feedback, open: false });
 
+  // 🔹 Obtener historial con filtros
   const fetchHistory = async () => {
+    setLoading(true);
     try {
       const params = {};
       if (search.trim()) params.part = search.trim();
@@ -47,8 +57,11 @@ export default function PalletHistoryTable() {
 
       const res = await api.get("/pallet-history/", { params });
       setHistory(res.data);
+      setPage(0); // 👈 Reinicia la paginación cuando hay nuevos resultados
     } catch (err) {
       console.error("Error cargando historial:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -57,18 +70,40 @@ export default function PalletHistoryTable() {
   }, []);
 
   const handleSearch = () => {
-    if (!search) {
+    if (!search && !startDate && !endDate) {
       setFeedback({
         open: true,
-        message: "Debes escanear el código QR y/o dar ubicación",
+        message: "Debes ingresar al menos un filtro (parte o rango de fechas)",
         severity: "warning",
       });
       return;
-    } else {
-      fetchHistory();
-      setSearch("");
     }
+    fetchHistory();
   };
+
+  // 🔹 Si se limpian los filtros, recarga todo
+  useEffect(() => {
+    if (!search && !startDate && !endDate) {
+      fetchHistory();
+    }
+  }, [search, startDate, endDate]);
+
+  // 🔹 Manejo de cambio de página
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  // 🔹 Manejo de cambio de filas por página
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  // 🔹 Calcular las filas visibles
+  const paginatedRows = history.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  );
 
   return (
     <Box sx={{ p: 3 }}>
@@ -84,22 +119,36 @@ export default function PalletHistoryTable() {
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
         />
+
         <TextField
-          label="Desde (fecha ingreso)"
-          type="date"
+          label="Desde (Fecha de retiro)"
+          type="datetime-local"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
           InputLabelProps={{ shrink: true }}
         />
         <TextField
-          label="Hasta (fecha retiro)"
-          type="date"
+          label="Hasta (Fecha de retiro)"
+          type="datetime-local"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
           InputLabelProps={{ shrink: true }}
         />
-        <Button variant="contained" onClick={handleSearch}>
-          Buscar
+
+        <Button variant="contained" onClick={handleSearch} disabled={loading}>
+          {loading ? "Buscando..." : "Buscar"}
+        </Button>
+        <Button
+          variant="outlined"
+          color="secondary"
+          onClick={() => {
+            setSearch("");
+            setStartDate("");
+            setEndDate("");
+          }}
+          disabled={loading}
+        >
+          {loading ? "Reseteando..." : "Reset"}
         </Button>
       </Box>
 
@@ -119,14 +168,14 @@ export default function PalletHistoryTable() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {history.length === 0 ? (
+            {paginatedRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={8} align="center">
                   No hay registros
                 </TableCell>
               </TableRow>
             ) : (
-              history.map((item, index) => (
+              paginatedRows.map((item, index) => (
                 <TableRow key={index}>
                   <TableCell>{item.part_number}</TableCell>
                   <TableCell>{item.quantity}</TableCell>
@@ -145,14 +194,30 @@ export default function PalletHistoryTable() {
             )}
           </TableBody>
         </Table>
+
+        {/* 🔹 Paginador */}
+        <TablePagination
+          component="div"
+          count={history.length}
+          page={page}
+          onPageChange={handleChangePage}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          labelRowsPerPage="Filas por página"
+        />
       </Paper>
 
+      {/* Snackbar */}
       <Snackbar
         open={feedback.open}
         autoHideDuration={5000}
         onClose={handleClose}
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
-      ></Snackbar>
+      >
+        <Alert onClose={handleClose} severity={feedback.severity}>
+          {feedback.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

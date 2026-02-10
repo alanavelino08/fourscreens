@@ -426,13 +426,31 @@ const ShipmentsList = ({ showAll }) => {
         }
       );
 
-      setSnackbar({
-        open: true,
-        message: response.data.success || "Albarán asignado correctamente.",
-        severity: "success",
-      });
+      if (
+        albaran.trim().toUpperCase() === "N/A" ||
+        albaran.trim().toLowerCase() === "n/a"
+      ) {
+        setSnackbar({
+          open: true,
+          message: "El albarán fue registrado como N/A (sin facturación).",
+          severity: "info",
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: response.data.success || "Albarán asignado correctamente.",
+          severity: "success",
+        });
+      }
+
+      // setSnackbar({
+      //   open: true,
+      //   message: response.data.success || "Albarán asignado correctamente.",
+      //   severity: "success",
+      // });
 
       //resetAlbaranInput();
+
       handleClose();
     } catch (error) {
       const data = error.response?.data;
@@ -715,7 +733,7 @@ const ShipmentsList = ({ showAll }) => {
                 const numB = parseInt(b.shipment_code.match(/\d+/)?.[0] || 0);
 
                 if (numA !== numB) {
-                  return numB - numA;
+                  return numA - numB;
                 }
 
                 return (

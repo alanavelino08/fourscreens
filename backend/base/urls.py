@@ -1,16 +1,20 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard, get_last_shipment, TransportViewSet, get_shipments_today_and_tomorrow, reset_password_direct, PartNumberSearch, ExcelUploadView, scan_pallet, location_status, delete_pallet, pallet_history, update_pallet_quantity, cargar_partes, MatchPedidoView, SaveMaterialEntryView, MaterialEntryListView, AdvanceMaterialEntryView, AdvanceYellowConeView, StepsListView, SaveMaterialWithdrawalView, MaterialWithdrawalSummaryView, ValidarDescargasView, FinalizeGreenConeView, BuyerMaterialRequestView, BuyerValidatePartView, BuyerListView, SendMailView, HandleRejectedEntryView
+from .views import UserViewSet, RequestViewSet, CustomTokenObtainPairView, PartNumberViewSet, ShipmentCreateView, ShipmentListView, ShipmentViewSet, PendingShipmentsDashboard, ShipmentsDashboard, get_last_shipment, TransportViewSet, get_shipments_today_and_tomorrow, reset_password_direct, PartNumberSearch, ExcelUploadView, scan_pallet, location_status, delete_pallet, pallet_history, update_pallet_quantity, cargar_partes, MatchPedidoView, SaveMaterialEntryView, MaterialEntryListView, AdvanceMaterialEntryView, AdvanceYellowConeView, StepsListView, SaveMaterialWithdrawalView, MaterialWithdrawalSummaryView, ValidarDescargasView, FinalizeGreenConeView, BuyerMaterialRequestView, BuyerValidatePartView, BuyerListView, SendMailView, HandleRejectedEntryView, shipment_report, AuditoryViewSet, WarehouseAreaViewSet, MaterialMetrics, LocateMaterialView, BuyerCreatePartView
 from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
+from django.conf import settings
+from django.conf.urls.static import static
+print("MEDIA_ROOT en runtime:", settings.MEDIA_ROOT)
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'requests', RequestViewSet, basename='request')
 router.register(r'partnumbers', PartNumberViewSet, basename='partnumber')
 router.register(r'transports', TransportViewSet, basename='transport')
-
+router.register(r'auditories', AuditoryViewSet, basename='auditory')
+router.register(r'areas', WarehouseAreaViewSet, basename='area')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -46,6 +50,7 @@ urlpatterns = [
     path('material-entry/<int:entry_id>/advance/', AdvanceMaterialEntryView.as_view()),
     path('material-entry/<int:entry_id>/advance-yellow/', AdvanceYellowConeView.as_view()),
     path("entries/<int:entry_id>/finalize-green/", FinalizeGreenConeView.as_view(), name="finalize-green-cone"),
+    path("entries/<int:entry_id>/locate/", LocateMaterialView.as_view()),
     path("material-entry/<int:entry_id>/handle-rejected/", HandleRejectedEntryView.as_view(), name="rejected-red-cone"),
     path('steps/', StepsListView.as_view(), name='steps-list'),
     path('save-material-withdrawal/', SaveMaterialWithdrawalView.as_view()),
@@ -54,5 +59,8 @@ urlpatterns = [
     path("buyer-material-request/", BuyerMaterialRequestView.as_view(), name="hotlist-request"),
     path('buyer-validate-part/<str:cod_art>/', BuyerValidatePartView.as_view(), name='buyer-validate-part'),
     path("buyers/", BuyerListView.as_view(), name="buyer-list"),
+    path("buyer-create-part/", BuyerCreatePartView.as_view(), name="buyer-create-part"),
     path("send-mail/", SendMailView.as_view(), name="send-mail"),
-]
+    path('shipment_report/', shipment_report, name='shipment_report'),
+    path("material_metrics/", MaterialMetrics.as_view(), name="material-metrics")
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

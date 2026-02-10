@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -165,3 +166,12 @@ EMAIL_HOST_USER = 'cgmg.shipping01@connectgroup.com'
 #EMAIL_HOST_USER = 'a.avelino@connectgroup.com'
 EMAIL_HOST_PASSWORD = 'Mex.2027*'
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+#FOTOS
+# MEDIA_URL = "/media/"
+# MEDIA_ROOT = r"\\ikormx-files\Publico\Dashboard\Downtime\Auditoria"
+# MEDIA_ROOT = BASE_DIR / "media"
+#MEDIA_ROOT = r"C:\Users\aavelino\OneDrive - connectgroup\Documentos\Embarques_uat\backend\backend\media"
+#MEDIA_URL = "/media/"
+MEDIA_URL = "/api/media/"
+MEDIA_ROOT = r"\\ikormx-files\Publico\Dashboard\Downtime\Auditoria"

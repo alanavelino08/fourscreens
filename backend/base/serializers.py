@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, Cone, MaterialEntry
+from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, Cone, MaterialEntry, Auditory, WarehouseArea, AuditoryEvidence, IncomingPart
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
 
@@ -174,6 +174,7 @@ class MaterialEntrySerializer(serializers.ModelSerializer):
     step_label = serializers.SerializerMethodField()
     user = UserSerializer(read_only=True)
     created_by = UserSerializer(read_only=True)
+    received_by = UserSerializer(read_only=True)
     cone = ConeSerializer()
 
     class Meta:
@@ -183,3 +184,57 @@ class MaterialEntrySerializer(serializers.ModelSerializer):
         
     def get_step_label(self, obj):
         return dict(MaterialEntry.STEP_CHOICES).get(obj.current_step, "")
+
+class IncomingPartCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IncomingPart
+        fields = ["code", "fam", "descrip", "is_urgent"]
+        
+    def validate_code(self, value):
+        if IncomingPart.objects.filter(code=value).exists():
+            raise serializers.ValidationError("El número de parte ya existe.")
+        return value
+    
+#Auditory plan
+class WarehouseAreaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WarehouseArea
+        fields = ['id', 'area']
+        
+class AuditoryEvidenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AuditoryEvidence
+        fields = ['id', 'image']
+
+            
+class AuditorySerializer(serializers.ModelSerializer):
+    created_by = UserSerializer(read_only=True)
+    assigned_to = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        many=True,
+        required=False
+    )
+    
+    assigned_to_details = UserSerializer(many=True, read_only=True, source='assigned_to')
+    area = WarehouseAreaSerializer(read_only=True)
+    area_id = serializers.PrimaryKeyRelatedField(
+        queryset=WarehouseArea.objects.all(),
+        write_only=True,
+        source='area',
+        required=False
+    )
+    evidences = AuditoryEvidenceSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Auditory
+        fields = "__all__"
+
+    def create(self, validated_data):
+        print("VALIDATED:", validated_data)
+        user = self.context["request"].user
+        validated_data["created_by"] = user
+        assigned_users = validated_data.pop("assigned_to", [])
+        
+        instance = super().create(validated_data)
+        instance.assigned_to.set(assigned_users)
+        return instance

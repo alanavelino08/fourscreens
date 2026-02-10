@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   TextField,
   Button,
@@ -9,11 +9,18 @@ import {
   IconButton,
   Snackbar,
   Alert,
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Autocomplete,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import api from "../../services/api";
 import { getCurrentUser } from "../../services/auth";
 import DeleteIcon from "@mui/icons-material/Delete";
+import incomingFamily from "./incomingfamily";
 
 const BuyerMaterialForm = () => {
   const [formData, setFormData] = useState({
@@ -36,6 +43,25 @@ const BuyerMaterialForm = () => {
     message: "",
     severity: "success",
   });
+
+  const [openDialog, setOpenDialog] = useState(false);
+  const [newPartData, setNewPartData] = useState({
+    cod_art: "",
+    descrip: "",
+  });
+
+  const [familyinc, setFamilyInc] = useState([]);
+  const [selectedFamily, setSelectedFamily] = useState(null);
+
+  useEffect(() => {
+    //console.log("Datos de familia:", incomingFamily);
+    if (Array.isArray(incomingFamily)) {
+      setFamilyInc(incomingFamily);
+    } else {
+      console.error("incomingfamily no es un array:", incomingFamily);
+    }
+  }, []);
+
   const handleClose = () => setFeedback({ ...feedback, open: false });
 
   // Maneja cambios en inputs
@@ -52,9 +78,60 @@ const BuyerMaterialForm = () => {
       setFormData((prev) => ({ ...prev, descrip: res.data.descrip }));
     } catch (error) {
       console.error("Error al validar código:", error);
+
+      const status = error.response?.status;
+
+      if (status === 404) {
+        // setFeedback({
+        //   open: true,
+        //   message: "N° parte no encontrado",
+        //   severity: "error",
+        // });
+        setNewPartData({
+          cod_art: formData.cod_art,
+          descrip: "",
+        });
+        setOpenDialog(true);
+      } else {
+        setFeedback({
+          open: true,
+          message: "Error al validar el N° de parte",
+          severity: "error",
+        });
+      }
+    }
+  };
+
+  //agregar numero de parte
+  const handleCreateNewPart = async () => {
+    try {
+      const payload = {
+        code: newPartData.cod_art,
+        descrip: newPartData.descrip,
+        fam: selectedFamily?.label,
+        is_urgent: false,
+      };
+
+      await api.post("/buyer-create-part/", payload);
+
+      setFormData((prev) => ({
+        ...prev,
+        cod_art: payload.code,
+        descrip: payload.descrip,
+      }));
+
+      setOpenDialog(false);
+
       setFeedback({
         open: true,
-        message: "N° parte no encontrado",
+        message: "N° de parte agregado correctamente",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error(error);
+      setFeedback({
+        open: true,
+        message: "Error al registrar el N° de parte",
         severity: "error",
       });
     }
@@ -62,10 +139,19 @@ const BuyerMaterialForm = () => {
 
   // Agregar línea a la tabla temporal
   const handleAddRow = () => {
-    if (!formData.cod_art || !formData.quantity) {
+    if (
+      !formData.cod_art ||
+      !formData.quantity ||
+      !formData.order ||
+      !formData.supplier_company ||
+      !formData.request_guide ||
+      !formData.parcel_service ||
+      !formData.invoice_number ||
+      !formData.arrived_date
+    ) {
       setFeedback({
         open: true,
-        message: "Debes ingresar código y cantidad",
+        message: "Por favor llena todos los campos",
         severity: "error",
       });
       return;
@@ -78,6 +164,22 @@ const BuyerMaterialForm = () => {
     console.log(newRow);
     setRows((prev) => [...prev, newRow]);
 
+    // Reset form
+    setFormData({
+      cod_art: "",
+      descrip: "",
+      quantity: "",
+      supplier_company: "",
+      order: "",
+      request_guide: "",
+      parcel_service: "",
+      is_urgent: false,
+      invoice_number: "",
+      arrived_date: "",
+    });
+  };
+
+  const handleReset = () => {
     // Reset form
     setFormData({
       cod_art: "",
@@ -271,6 +373,7 @@ const BuyerMaterialForm = () => {
               value={formData.supplier_company}
               onChange={handleChange}
               fullWidth
+              required
             />
           </Grid>
           <Grid item xs={2}>
@@ -280,6 +383,7 @@ const BuyerMaterialForm = () => {
               value={formData.request_guide}
               onChange={handleChange}
               fullWidth
+              required
             />
           </Grid>
           <Grid item xs={2}>
@@ -289,6 +393,7 @@ const BuyerMaterialForm = () => {
               value={formData.parcel_service}
               onChange={handleChange}
               fullWidth
+              required
             />
           </Grid>
           <Grid item xs={2}>
@@ -298,6 +403,7 @@ const BuyerMaterialForm = () => {
               value={formData.invoice_number}
               onChange={handleChange}
               fullWidth
+              required
             />
           </Grid>
           <Grid item xs={12} md={6}>
@@ -305,7 +411,7 @@ const BuyerMaterialForm = () => {
               fullWidth
               name="arrived_date"
               type="date"
-              label="Fecha *"
+              label="Fecha"
               value={formData.arrived_date}
               onChange={handleChange}
               InputLabelProps={{ shrink: true }}
@@ -313,13 +419,17 @@ const BuyerMaterialForm = () => {
                 min: todayStr,
                 max: tomorrowStr,
               }}
+              required
             />
           </Grid>
-          <Grid item xs={12}>
+          <Stack spacing={2} direction="row" mt={2}>
             <Button variant="contained" onClick={handleAddRow}>
               Agregar
             </Button>
-          </Grid>
+            <Button variant="outlined" onClick={handleReset}>
+              Reset
+            </Button>
+          </Stack>
         </Grid>
       </Paper>
 
@@ -341,6 +451,73 @@ const BuyerMaterialForm = () => {
           </Button>
         </Box>
       </Paper>
+
+      {/* Dialog Registro numero de parte */}
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: "bold" }} color="#F52727">
+          N° de parte no encontrado
+        </DialogTitle>
+
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            El número de parte <strong>{newPartData.cod_art}</strong> no existe.
+            <br />
+            ¿Deseas agregarlo?
+          </Typography>
+
+          <Stack spacing={2}>
+            <TextField
+              label="Descripción"
+              value={newPartData.descrip}
+              onChange={(e) =>
+                setNewPartData((prev) => ({
+                  ...prev,
+                  descrip: e.target.value,
+                }))
+              }
+              fullWidth
+              autoFocus
+            />
+
+            <Autocomplete
+              disablePortal
+              options={familyinc}
+              value={selectedFamily}
+              onChange={(event, newValue) => {
+                setSelectedFamily(newValue);
+                console.log("Familia seleccionada:", newValue?.label);
+              }}
+              getOptionLabel={(option) => option.label || ""}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Familia"
+                  fullWidth
+                  variant="outlined"
+                />
+              )}
+              sx={{ width: 300 }}
+            />
+          </Stack>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>No</Button>
+
+          <Button
+            variant="contained"
+            onClick={handleCreateNewPart}
+            disabled={!newPartData.descrip.trim() || !selectedFamily}
+          >
+            Sí, agregar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar para alertas */}
       <Snackbar

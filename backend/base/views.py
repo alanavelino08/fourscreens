@@ -1,8 +1,8 @@
 from rest_framework import viewsets, status, permissions, generics, filters
 from rest_framework.response import Response
-from rest_framework.decorators import action, api_view, permission_classes
-from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, PalletHistory, IncomingPart, SupplierInfo, Cone, MaterialEntry, ProductionOrder, MaterialWithdrawal
-from .serializers import UserSerializer, RequestSerializer, ShipmentSerializer, PartNumberSerializer, TransportSerializer, PalletSerializer, MaterialEntrySerializer
+from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
+from .models import User, Request, PartNumber, Shipment, Transport, Location, PalletScan, PalletHistory, IncomingPart, SupplierInfo, Cone, MaterialEntry, ProductionOrder, MaterialWithdrawal, WarehouseArea, Auditory, AuditoryEvidence
+from .serializers import UserSerializer, RequestSerializer, ShipmentSerializer, PartNumberSerializer, TransportSerializer, PalletSerializer, MaterialEntrySerializer, AuditorySerializer, WarehouseAreaSerializer, IncomingPartCreateSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -28,6 +28,10 @@ from django.views.decorators.csrf import csrf_exempt
 from io import BytesIO
 from django.core.exceptions import ValidationError
 from django.conf import settings
+import win32wnet
+from django.db import connection
+from django.utils.dateparse import parse_datetime
+from django.db.models import Q
 
 
 class IsAdmin(permissions.BasePermission):
@@ -54,6 +58,12 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return [AllowAny()]
         return [IsAuthenticated()]
+
+    def get_queryset(self):
+        role = self.request.query_params.get('role')
+        if role:
+            return self.queryset.filter(role=role)
+        return self.queryset
 
     @action(detail=True, methods=['patch'])
     def update_users(self, request, pk=None):
@@ -204,13 +214,22 @@ class ShipmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if Shipment.objects.filter(albaran=add_albaran).exists():
+        # if Shipment.objects.filter(albaran=add_albaran).exists():
+        #     return Response(
+        #         {'error': 'Este albaran ya está registrado en otro shipment'},
+        #         status=status.HTTP_409_CONFLICT
+        #     )
+        if add_albaran.upper() != "N/A" and Shipment.objects.filter(albaran=add_albaran).exists():
             return Response(
                 {'error': 'Este albaran ya está registrado en otro shipment'},
                 status=status.HTTP_409_CONFLICT
             )
 
-        shipment.albaran = add_albaran
+        if add_albaran.strip().upper() == "N/A":
+            shipment.albaran = "N/A"
+        else:
+            shipment.albaran = add_albaran.strip()
+        #shipment.albaran = add_albaran
         shipment.save()
 
         # serialized_data = ShipmentSerializer(shipment).data
@@ -478,16 +497,17 @@ User = get_user_model()
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])  # 🔥 CLAVE
 def reset_password_direct(request):
     email = request.data.get('email', '').strip().lower()
     password = request.data.get('password')
     confirm_password = request.data.get('confirm_password')
 
     if not email or not password or not confirm_password:
-        return Response({'detail': 'Todos los campos son requeridos.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'detail': 'Todos los campos son requeridos.'}, status=400)
 
     if password != confirm_password:
-        return Response({'detail': 'Las contraseñas no coinciden.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'detail': 'Las contraseñas no coinciden.'}, status=400)
 
     try:
         user = User.objects.get(email=email)
@@ -495,7 +515,103 @@ def reset_password_direct(request):
         user.save()
         return Response({'detail': 'Contraseña actualizada correctamente.'})
     except User.DoesNotExist:
-        return Response({'detail': 'Usuario no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'detail': 'Usuario no encontrado.'}, status=404)
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# def reset_password_direct(request):
+#     email = request.data.get('email', '').strip().lower()
+#     password = request.data.get('password')
+#     confirm_password = request.data.get('confirm_password')
+
+#     if not email or not password or not confirm_password:
+#         return Response({'detail': 'Todos los campos son requeridos.'}, status=status.HTTP_400_BAD_REQUEST)
+
+#     if password != confirm_password:
+#         return Response({'detail': 'Las contraseñas no coinciden.'}, status=status.HTTP_400_BAD_REQUEST)
+
+#     try:
+#         user = User.objects.get(email=email)
+#         user.set_password(password)
+#         user.save()
+#         return Response({'detail': 'Contraseña actualizada correctamente.'})
+#     except User.DoesNotExist:
+#         return Response({'detail': 'Usuario no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def shipment_report(request):
+    # Parámetros de fecha desde el frontend
+    date_start = request.GET.get('date_start')
+    date_end = request.GET.get('date_end')
+
+    if not date_start or not date_end:
+        return Response({"error": "Debes enviar date_start y date_end (YYYY-MM-DD)"}, status=400)
+
+    with connection.cursor() as cursor:
+        cursor.execute(f"""
+            SELECT 
+                s.shipment_code AS folio_embarque,
+                DATEADD(HOUR, -6, s.created_at) AS fecha_creacion,
+                DATEADD(HOUR, -6, s.requirement_date) AS fecha_requerida,
+                s.albaran,
+                s.[status],
+                DATEADD(HOUR, -6, s.preparation_at) AS fecha_preparacion,
+                DATEADD(HOUR, -6, s.onhold_at) AS fecha_en_espera,
+                DATEADD(HOUR, -6, s.finished_at) AS fecha_terminado,
+                DATEADD(HOUR, -6, s.validation_at) AS fecha_validacion_calidad,
+                DATEADD(HOUR, -6, s.waittruck_at) AS fecha_espera_camion,
+                DATEADD(HOUR, -6, s.delivered_at) AS enviado,
+                creador.first_name AS creado_por,
+                creador.last_name AS apellido,
+                creador.email AS email_creador,
+                tomador.username AS tomado_por,
+                tomador.email AS email_tomador,
+                COUNT(r.id) AS cantidad_pedidos,
+                STRING_AGG(r.[order], ', ') AS lista_pedidos,
+                MAX(p.project) AS proyecto,
+                DATEDIFF(MINUTE, s.created_at, s.preparation_at) AS minutos_tomar_embarque,
+                DATEDIFF(MINUTE, s.preparation_at, s.delivered_at) AS minutos_preparacion_envio,
+                DATEDIFF(MINUTE, s.finished_at, s.validation_at) AS minutos_tomar_calidad,
+                DATEDIFF(MINUTE, s.validation_at, s.waittruck_at) AS minutos_validacion_calidad,
+                DATEDIFF(MINUTE, s.finished_at, s.waittruck_at) AS minutos_total_calidad,
+                DATEDIFF(MINUTE, s.created_at, s.requirement_date) 
+                    - DATEDIFF(MINUTE, s.created_at, s.preparation_at) AS minutos_ventana_tiempo_planeador
+            FROM 
+                base_shipment s
+            JOIN 
+                base_user creador ON s.created_by_id = creador.id
+            LEFT JOIN 
+                base_user tomador ON s.taked_by_id = tomador.id
+            LEFT JOIN 
+                base_request r ON r.shipment_id = s.id
+            LEFT JOIN 
+                base_partnumber p ON r.part_number_id = p.id
+            WHERE 
+                s.created_at >= %s
+                AND s.created_at < %s
+            GROUP BY
+                s.shipment_code,
+                s.created_at,
+                s.requirement_date,
+                s.albaran,
+                s.[status],
+                s.preparation_at,
+                s.onhold_at,
+                s.finished_at,
+                s.validation_at,
+                s.waittruck_at,
+                s.delivered_at,
+                creador.first_name,
+                creador.last_name,
+                creador.email,
+                tomador.username,
+                tomador.email
+        """, [date_start, date_end])
+
+        columns = [col[0] for col in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    return Response(results)
     
 #FINISH GOOD
 def process_scan(scan_str, user, location_str):
@@ -659,7 +775,8 @@ def update_pallet_quantity(request, pk):
         return Response({"message": "Cantidad actualizada correctamente"})
     except pallet.DoesNotExist:
         return Response({"error": "Pallet no encontrado"}, status=404)
-    
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def pallet_history(request):
@@ -671,11 +788,32 @@ def pallet_history(request):
 
     if part:
         history = history.filter(part_number__icontains=part)
-    
+
+    # Filtrado solo por timestamp_out
+    fmt_with_time = "%Y-%m-%dT%H:%M"
+    fmt_only_date = "%Y-%m-%d"
+
     if start:
-        history = history.filter(timestamp_out__date__gte=start)
+        try:
+            if "T" in start:
+                start_dt = datetime.strptime(start, fmt_with_time)
+            else:
+                start_dt = datetime.strptime(start, fmt_only_date)
+        except ValueError:
+            return Response({"error": "Formato de fecha de inicio inválido"}, status=400)
+        history = history.filter(timestamp_out__gte=start_dt)
+
     if end:
-        history = history.filter(timestamp_out__date__lte=end)
+        try:
+            if "T" in end:
+                end_dt = datetime.strptime(end, fmt_with_time)
+            else:
+                end_dt = datetime.strptime(end, fmt_only_date)
+                # final del día si solo se pasó fecha
+                end_dt = end_dt.replace(hour=23, minute=59, second=59)
+        except ValueError:
+            return Response({"error": "Formato de fecha final inválido"}, status=400)
+        history = history.filter(timestamp_out__lte=end_dt)
 
     serialized = [{
         "part_number": p.part_number,
@@ -689,6 +827,7 @@ def pallet_history(request):
     } for p in history]
 
     return Response(serialized)
+
 
 #Withdrawal Material
 class SaveMaterialWithdrawalView(APIView):
@@ -802,6 +941,25 @@ class MaterialWithdrawalSummaryView(APIView):
 
         return Response(data, status=status.HTTP_200_OK)
 
+
+def conectar_unidad_red(ruta, usuario, password):
+    """
+    Conecta una carpeta de red usando credenciales.
+    """
+    try:
+        win32wnet.WNetAddConnection2(
+            0,              # Tipo de recurso (0 = RESOURCETYPE_DISK)
+            None,           # Nombre local (None para no asignar letra)
+            ruta,           # Ruta UNC de la carpeta
+            None,           # Dominio (None usa el del usuario)
+            usuario,        # Usuario con permiso
+            password        # Contraseña
+        )
+        return True
+    except Exception as e:
+        print(f"Error conectando a red: {e}")
+        return False
+    
 class ValidarDescargasView(APIView):
     def get(self, request):
         fecha_str = request.query_params.get("date", "").strip()
@@ -815,11 +973,26 @@ class ValidarDescargasView(APIView):
         try:
             fecha_excel = datetime.strptime(fecha_str, "%Y-%m-%d").date()
 
+            ruta_base = r"\\ikormx-files\Supply Chain\.06- Reporting\13 Reportes  Diarios"
+
+            conectado = conectar_unidad_red(
+                ruta=ruta_base,
+                usuario=r"MEXIKOR\aavelino",
+                password="America00$"
+            )
+
+            if not conectado:
+                return Response(
+                    {"error": "No se pudo conectar a la carpeta de red"},
+                    status=500
+                )
+            
             ruta_archivo = os.path.join(
-                r"\\ikormx-files\Supply Chain\.06- Reporting\13 Reportes  Diarios",
+                ruta_base,
                 str(fecha_excel.year),
                 "REPORTES  HOY.xlsx"
             )
+
             if not os.path.exists(ruta_archivo):
                 return Response({"error": f"No se encontró el archivo {ruta_archivo}"}, status=404)
 
@@ -828,7 +1001,6 @@ class ValidarDescargasView(APIView):
                 sheet_name="MOVIMIENTOS MES  (2K DIARIA)",
                 skiprows=2
             )
-
             df["fech_mov"] = pd.to_datetime(df["fech_mov"], format="%d/%m/%Y", errors="coerce").dt.date
 
             df_filtrado = df[
@@ -851,44 +1023,90 @@ class ValidarDescargasView(APIView):
             if order_number_filter:
                 qs = qs.filter(production_order__order_number__icontains=order_number_filter)
 
-            bd_dict = {
-                (str(w["production_order__order_number"]).strip(), str(w["part_code"]).strip()): float(w["total_qty"])
-                for w in (
-                    qs.values("production_order__order_number", "part_code")
-                      .annotate(total_qty=Sum("qty"))
-                )
-            }
+            bd_dict = {}
+            for w in qs.values(
+                "production_order__order_number",
+                "part_code",
+                "production_order__entry_date",
+                "user_out_material__username"
+            ).annotate(total_qty=Sum("qty")):
+                key = (str(w["production_order__order_number"]).strip(), str(w["part_code"]).strip())
+                bd_dict[key] = {
+                    "qty": float(w["total_qty"]),
+                    "fecha": w["production_order__entry_date"].strftime("%Y-%m-%d %H:%M:%S") if w["production_order__entry_date"] else "",
+                    "usuario": w["user_out_material__username"] or ""
+                }
 
             keys_intersection = [k for k in bd_dict.keys() if k in excel_full]
 
             resultados = []
             for key in keys_intersection:
                 order_number, part_code = key
-                qty_bd = bd_dict[key]
+                data_bd = bd_dict[key]
+                qty_bd = data_bd["qty"]
                 qty_excel = float(excel_full[key])
 
                 diferencia = qty_excel - qty_bd
                 if abs(diferencia) < 1e-9:
                     diferencia = 0.0
 
-                estado = "OK" if diferencia == 0 else ("FALTA" if diferencia > 0 else "SOBRA")
+                estado = "OK" if diferencia == 0 else ("FALTA" if diferencia > 0 else "VERIFICAR")
 
                 resultados.append({
                     "Orden": order_number,
                     "Parte": part_code,
-                    "Cantidad_Excel": qty_excel,
-                    "Cantidad_BD": qty_bd,
+                    "Cantidad_PINWIN": qty_excel,
+                    "Cantidad_APP": qty_bd,
                     "Diferencia": diferencia,
-                    "Estado": estado
+                    "Estado": estado,
+                    "Fecha": data_bd["fecha"],
+                    "Usuario": data_bd["usuario"],
                 })
 
-            resultados.sort(key=lambda r: (r["Orden"], r["Parte"]))
+            resultados.sort(key=lambda r: (r["Orden"], r["Parte"]))    
 
             if export_excel:
                 df_resultados = pd.DataFrame(resultados)
+
+                lotes_qs = (
+                    MaterialWithdrawal.objects.filter(production_order__entry_date__date=fecha_excel)
+                    .select_related("production_order")
+                )
+
+                if part_code_filter:
+                    lotes_qs = lotes_qs.filter(part_code__icontains=part_code_filter)
+                if order_number_filter:
+                    lotes_qs = lotes_qs.filter(production_order__order_number__icontains=order_number_filter)
+
+                lotes_data = (
+                    lotes_qs.values(
+                        "production_order__order_number",
+                        "part_code",
+                        "batch",
+                    )
+                    .annotate(total_qty=Sum("qty"))
+                    .order_by("production_order__order_number", "part_code", "batch")
+                )
+
+                df_lotes = pd.DataFrame(list(lotes_data))
+                if not df_lotes.empty:
+                    df_lotes.rename(columns={
+                        "production_order__order_number": "OF",
+                        "part_code": "N° de parte",
+                        "batch": "Lotes",
+                        "total_qty": "Cantidad por lote"
+                    }, inplace=True)
+
+                    df_lotes["Cantidad por lote"] = df_lotes["Cantidad por lote"].fillna(0).astype(int)
+                else:
+
+                    df_lotes = pd.DataFrame(columns=["OF", "N° de parte", "Lotes", "Cantidad por lote"])
+
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    df_resultados.to_excel(writer, index=False, sheet_name="Validación")
+                    df_resultados.to_excel(writer, index=False, sheet_name="Descarga")
+                    df_lotes.to_excel(writer, index=False, sheet_name="Lotes_por_Nparte")
+
                 output.seek(0)
 
                 response = HttpResponse(
@@ -901,7 +1119,7 @@ class ValidarDescargasView(APIView):
             return Response(resultados, status=200)
 
         except Exception as e:
-            return Response({"error": str(e)}, status=500)
+            return Response({"error": str(e)}, status=500)    
     
 #INCOMING    
 class ExcelUploadView(APIView):
@@ -1010,6 +1228,7 @@ class SaveMaterialEntryView(APIView):
                 order = order,
                 user=user,
                 cone=white_cone,
+                folio_type=MaterialEntry.FOLIO_INC,
             )
 
             # Asignar cono
@@ -1033,6 +1252,118 @@ class MaterialEntryListView(APIView):
         entries = MaterialEntry.objects.select_related('cone').order_by('created_at')
         data = MaterialEntrySerializer(entries, many=True).data
         return Response(data)
+
+class MaterialMetrics(APIView):
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        date_start = request.query_params.get("date_start")
+        date_end = request.query_params.get("date_end")
+
+        entries = MaterialEntry.objects.select_related("cone").order_by("created_at")
+
+        # ---- FILTRO POR FECHA+HORA ----
+        if date_start and date_end:
+            start = parse_datetime(date_start)
+            end = parse_datetime(date_end)
+
+            if not start or not end:
+                return Response(
+                    {"error": "Formato de fecha inválido. Usa: 2025-11-19T06:00"},
+                    status=400
+                )
+
+            entries = entries.filter(
+                created_at__gte=start,
+                created_at__lte=end,
+            )
+
+        # ---- MÉTRICOS GLOBALES ----
+        total_created_to_released = timedelta()
+        total_onhold_to_doc = timedelta()
+        total_released_to_delivered = timedelta()
+        rejection_count = 0
+        urgent_count = 0
+        total_onhold = 0
+
+        results = []
+
+        for entry in entries:
+
+            # ============================
+            # MÉTRICOS POR ITEM
+            # ============================
+
+            # 1. created_at → released_at
+            if entry.created_at and entry.released_at:
+                td_created_to_released = entry.released_at - entry.created_at
+            else:
+                td_created_to_released = None
+
+            # 2. onhold_at → document_validation
+            if entry.onhold_at and entry.document_validation:
+                td_onhold_to_doc = entry.document_validation - entry.onhold_at
+            else:
+                td_onhold_to_doc = None
+
+            # 3. released_at → delivered_at
+            if entry.released_at and entry.delivered_at:
+                td_released_to_delivered = entry.delivered_at - entry.released_at
+            else:
+                td_released_to_delivered = None
+
+            # --- acumular para métricos globales
+            if td_created_to_released:
+                total_created_to_released += td_created_to_released
+            if td_onhold_to_doc:
+                total_onhold_to_doc += td_onhold_to_doc
+            if td_released_to_delivered:
+                total_released_to_delivered += td_released_to_delivered
+
+            if entry.rma or entry.income:
+                rejection_count += 1
+                
+            if entry.is_urgent:
+                urgent_count += 1
+                
+            if entry.onhold_at:
+                total_onhold += 1
+
+            # ---- SERIALIZADO BASE ----
+            serialized = MaterialEntrySerializer(entry).data
+
+            # ---- AGREGAR MÉTRICOS POR ITEM ----
+            serialized["time_created_to_released"] = (
+                str(td_created_to_released) if td_created_to_released else None
+            )
+            serialized["time_onhold_to_document_validation"] = (
+                str(td_onhold_to_doc) if td_onhold_to_doc else None
+            )
+            serialized["time_released_to_delivered"] = (
+                str(td_released_to_delivered) if td_released_to_delivered else None
+            )
+
+            results.append(serialized)
+
+        # ---- FUNC PARA FORMATO GLOBAL ----
+        def td_to_str(td):
+            return str(td)
+
+        metrics = {
+            "count": entries.count(),
+            "created_to_released": td_to_str(total_created_to_released),
+            "onhold_to_document_validation": td_to_str(total_onhold_to_doc),
+            "released_to_delivered": td_to_str(total_released_to_delivered),
+            "rejections": rejection_count,
+            "urgent_count": urgent_count,
+            "onhold_count": total_onhold
+        }
+
+        return Response({
+            "results": results,
+            "metrics": metrics
+        })
+
 
 #advance to yellow or black cone.
 class AdvanceMaterialEntryView(APIView):
@@ -1238,6 +1569,86 @@ class AdvanceYellowConeView(APIView):
         )
 
 #release material and finalize the process
+# class FinalizeGreenConeView(APIView):
+#     def post(self, request, entry_id):
+#         try:
+#             entry = MaterialEntry.objects.get(id=entry_id)
+#         except MaterialEntry.DoesNotExist:
+#             return Response({"detail": "Not found"}, status=404)
+
+#         # Validar que tiene un cono verde
+#         cone_color = entry.cone.color if entry.cone else None
+#         if cone_color != "green":
+#             return Response({"detail": "El material no está en cono verde"}, status=400)
+
+#         # Liberar el cono verde
+#         if entry.cone:
+#             entry.cone.is_assigned = False
+#             entry.cone.assigned_to = None
+#             entry.cone.save()
+#             entry.cone = None
+
+#         # Cambiar estado a finalizado y registrar hora de entrega
+#         if entry.current_step == MaterialEntry.STEP_LIBERADO:
+#             entry.previous_step = MaterialEntry.STEP_LIBERADO
+#         entry.current_step = MaterialEntry.STEP_FINALIZADO
+#         entry.delivered_at = timezone.now()
+#         entry.save()
+
+#         return Response({
+#             "success": True,
+#             "detail": "Material entregado, cono liberado",
+#             "current_step": entry.current_step,
+#             "delivered_at": entry.delivered_at
+#         }, status=200)
+
+#Entregar a usuario almacén
+# class FinalizeGreenConeView(APIView):
+#     def post(self, request, entry_id):
+#         try:
+#             entry = MaterialEntry.objects.get(id=entry_id)
+#         except MaterialEntry.DoesNotExist:
+#             return Response({"detail": "Not found"}, status=404)
+
+#         # Validación del cono verde
+#         if not entry.cone or entry.cone.color != "green":
+#             return Response({"detail": "El material no está en cono verde"}, status=400)
+
+#         # Obtener datos enviados desde frontend
+#         received_by_id = request.data.get("received_by")
+#         #received_at = request.data.get("received_at")
+
+#         if not received_by_id :
+#             return Response({"detail": "Faltan datos de recepción"}, status=400)
+
+#         try:
+#             received_user = User.objects.get(id=received_by_id)
+#         except User.DoesNotExist:
+#             return Response({"detail": "Usuario receptor inválido"}, status=400)
+
+#         # Liberar el cono verde
+#         entry.cone.is_assigned = False
+#         entry.cone.assigned_to = None
+#         entry.cone.save()
+#         entry.cone = None
+
+#         # Cambiar estado
+#         entry.previous_step = entry.current_step
+#         entry.current_step = MaterialEntry.STEP_FINALIZADO
+
+#         entry.received_by = received_user
+#         entry.delivered_at = timezone.now()
+
+#         entry.save()
+
+#         return Response({
+#             "success": True,
+#             "detail": "Material entregado, cono liberado",
+#             "current_step": entry.current_step,
+#             "delivered_at": entry.delivered_at,
+#             "received_by": received_user.username
+#         }, status=200)
+
 class FinalizeGreenConeView(APIView):
     def post(self, request, entry_id):
         try:
@@ -1245,30 +1656,114 @@ class FinalizeGreenConeView(APIView):
         except MaterialEntry.DoesNotExist:
             return Response({"detail": "Not found"}, status=404)
 
-        # Validar que tiene un cono verde
-        cone_color = entry.cone.color if entry.cone else None
-        if cone_color != "green":
-            return Response({"detail": "El material no está en cono verde"}, status=400)
+        # Validación del cono verde
+        if not entry.cone or entry.cone.color != "green":
+            return Response(
+                {"detail": "El material no está en cono verde"},
+                status=400
+            )
 
-        # Liberar el cono verde
-        if entry.cone:
-            entry.cone.is_assigned = False
-            entry.cone.assigned_to = None
-            entry.cone.save()
-            entry.cone = None
+        # 🔹 Obtener ubicación
+        esplanade = request.data.get("esplanade")
 
-        # Cambiar estado a finalizado y registrar hora de entrega
-        if entry.current_step == MaterialEntry.STEP_LIBERADO:
-            entry.previous_step = MaterialEntry.STEP_LIBERADO
+        if esplanade not in ["INCOMING", "GENESIS"]:
+            return Response(
+                {"detail": "Ubicación inválida"},
+                status=400
+            )
+
+        # 🔹 Liberar cono verde
+        entry.cone.is_assigned = False
+        entry.cone.assigned_to = None
+        entry.cone.save()
+        entry.cone = None
+
+        # 🔹 Cambiar estado
+        entry.previous_step = entry.current_step
         entry.current_step = MaterialEntry.STEP_FINALIZADO
+
+        # 🔹 Guardar ubicación
+        entry.esplanade = esplanade
         entry.delivered_at = timezone.now()
+
+        entry.save()
+        
+        try:
+            to_emails = ["a.avelino@connectgroup.com"]
+
+            part_code = entry.cod_art
+            part_description = entry.descrip
+
+            html_content = f"""
+                <p>Hola equipo de almacén.</p>
+
+                <p>
+                    El material <strong>{part_code}</strong><br> <em>{part_description}</em><br><br>
+                    ya fue liberado y se encuentra en la explanada <strong>{esplanade}</strong>.
+                </p>
+
+                <p>Gracias y saludos.</p>
+            """
+
+            email = EmailMessage(
+                subject=f"Material {part_code} - liberado en {esplanade}",
+                body=html_content,
+                from_email=None,
+                to=to_emails,
+            )
+            email.content_subtype = "html"
+            email.send(fail_silently=False)
+            print(email)
+
+        except Exception as e:
+            print("no se envio", str(e))
+            return Response(
+                {
+                    "success": True,
+                    "warning": f"Material finalizado pero el correo no se envió: {str(e)}"
+                },
+                status=status.HTTP_207_MULTI_STATUS
+            )
+
+        return Response({
+            "success": True,
+            "detail": "Material finalizado y enviado a explanada",
+            "current_step": entry.current_step,
+            "delivered_at": entry.delivered_at,
+            "esplanade": entry.esplanade,
+        }, status=200)
+
+        
+# To allocate material delivered
+class LocateMaterialView(APIView):
+    def post(self, request, entry_id):
+        try:
+            entry = MaterialEntry.objects.get(id=entry_id)
+        except MaterialEntry.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+
+        # if entry.current_step != MaterialEntry.STEP_FINALIZADO:
+        #     return Response({"detail": "El material no está pendiente de ubicación"}, status=400)
+
+        area = request.data.get("area")
+        location = request.data.get("location")
+
+        if not area or not location:
+            return Response({"detail": "Área y ubicación son requeridos"}, status=400)
+
+        entry.area = area
+        entry.location = location
+        entry.located_at = timezone.now()
+        entry.previous_step = entry.current_step
+        entry.current_step = MaterialEntry.STEP_UBICADO
         entry.save()
 
         return Response({
             "success": True,
-            "detail": "Material entregado, cono liberado",
-            "current_step": entry.current_step,
-            "delivered_at": entry.delivered_at
+            "detail": "Material ubicado correctamente",
+            "area": entry.area,
+            "location": entry.location,
+            "located_at": entry.located_at
         }, status=200)
 
 # Handle the red cone 
@@ -1389,6 +1884,7 @@ class BuyerMaterialRequestView(APIView):
                 invoice_number=invoice_number,
                 created_by=user,
                 cone=white_cone,
+                folio_type=MaterialEntry.FOLIO_BUY, 
             )
 
             # Marcar cono como asignado
@@ -1406,7 +1902,8 @@ class BuyerMaterialRequestView(APIView):
                 "cone_number": white_cone.number,
                 "cone_color": white_cone.color,
                 "is_urgent": entry.is_urgent,
-                "arrived_date": entry.arrived_date
+                "arrived_date": entry.arrived_date,
+                "folio": entry.folio
             })
 
         return Response({"saved": saved_entries}, status=status.HTTP_201_CREATED)    
@@ -1430,6 +1927,23 @@ class BuyerListView(APIView):
     def get(self, request):
         buyers = User.objects.filter(role="BUYER").values_list("email", flat=True)
         return Response(buyers)
+    
+class BuyerCreatePartView(APIView):
+    def post(self, request):
+        serializer = IncomingPartCreateSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            part = serializer.save()
+            return Response(
+                {
+                    "cod_art": part.code,
+                    "descrip": part.descrip,
+                    "fam": part.fam,
+                    "is_urgent": part.is_urgent,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class SendMailView(APIView):
     def post(self, request):
@@ -1517,3 +2031,204 @@ def cargar_partes(request):
             return JsonResponse({"error": f"Error al procesar el archivo: {str(e)}"}, status=500)
 
     return JsonResponse({"error": "Método no permitido"}, status=405)
+
+#Auditory plan
+class WarehouseAreaViewSet(viewsets.ModelViewSet):
+    queryset = WarehouseArea.objects.all()
+    serializer_class = WarehouseAreaSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+# class AuditoryViewSet(viewsets.ModelViewSet):
+#     queryset = Auditory.objects.all().order_by('-created_at')
+#     serializer_class = AuditorySerializer
+#     permission_classes = [permissions.IsAuthenticated]
+
+#     def get_queryset(self):
+#         user = self.request.user
+
+#         if user.role == 'ADMIN':
+#             return Auditory.objects.all().order_by('-created_at')
+
+#         elif user.role == 'WAREHOUSE':
+#             return Auditory.objects.filter(
+#                 Q(status__in=['PENDING', 'IN_PROGRESS']) |
+#                 Q(assigned_to=user)
+#             ).distinct().order_by('-created_at')
+
+#         return Auditory.objects.none()
+
+#     def get_permissions(self):
+#         if self.action in ['create', 'update', 'partial_update', 'destroy']:
+#             permission_classes = [IsAdmin]
+#         elif self.action in ['list', 'retrieve']:
+#             permission_classes = [permissions.IsAuthenticated]
+#         else:
+#             permission_classes = [permissions.IsAuthenticated]
+#         return [perm() for perm in permission_classes]
+
+#     def perform_create(self, serializer):
+#         serializer.save()
+
+#     # ⬇⬇⬇ AGREGAR ESTO PARA MULTI-IMAGES ⬇⬇⬇
+#     def handle_evidence_upload(self, request, auditory):
+#         """
+#         Maneja la carga de múltiples evidencias desde request.FILES.
+#         """
+#         # Si viene un solo archivo o varios con el mismo nombre "evidence"
+#         if 'evidence' in request.FILES:
+#             files = request.FILES.getlist('evidence')
+#             for f in files:
+#                 AuditoryEvidence.objects.create(
+#                     auditory=auditory,
+#                     image=f
+#                 )
+
+#         # Si también quieres soportar múltiples action_evidence:
+#         if 'action_evidence' in request.FILES:
+#             files2 = request.FILES.getlist('action_evidence')
+#             for f in files2:
+#                 AuditoryEvidence.objects.create(
+#                     auditory=auditory,
+#                     image=f
+#                 )
+
+#     # PATCH con soporte multi-image
+#     def partial_update(self, request, *args, **kwargs):
+#         response = super().partial_update(request, *args, **kwargs)
+
+#         auditory = self.get_object()
+#         self.handle_evidence_upload(request, auditory)
+
+#         return response
+    
+#     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+#     def take(self, request, pk=None):
+#         auditory = self.get_object()
+#         user = request.user
+
+#         if user.role != 'WAREHOUSE':
+#             return Response(
+#                 {'detail': 'Solo usuarios WAREHOUSE pueden tomar auditorías.'},
+#                 status=403
+#             )
+
+#         if auditory.status != 'PENDING':
+#             return Response(
+#                 {'detail': 'La auditoría no está disponible para tomar.'},
+#                 status=400
+#             )
+
+#         auditory.status = 'IN_PROGRESS'
+#         auditory.in_progress_at = timezone.now()
+#         auditory.assigned_to.add(user)
+#         auditory.save()
+
+#         return Response({'detail': 'Auditoría tomada correctamente.'})
+
+#     # --- Acción personalizada para marcar como completada ---
+#     @action(detail=True, methods=['post'])
+#     def mark_done(self, request, pk=None):
+#         auditory = self.get_object()
+
+#         if request.user not in auditory.assigned_to.all() and request.user.role not in ['ADMIN', 'PLANNER']:
+#             return Response({'detail': 'No tienes permiso para completar esta tarea.'}, status=403)
+
+#         auditory.status = 'DONE'
+#         auditory.completed_at = timezone.now()
+#         auditory.save()
+
+#         return Response({'detail': 'Tarea marcada como completada.'})
+class AuditoryViewSet(viewsets.ModelViewSet):
+    queryset = Auditory.objects.all().order_by('-created_at')
+    serializer_class = AuditorySerializer
+
+    # ---------------- QUERYSET ----------------
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.role == 'ADMIN':
+            return Auditory.objects.all().order_by('-created_at')
+
+        if user.role == 'WAREHOUSE':
+            return Auditory.objects.filter(
+                Q(status__in=['PENDING', 'IN_PROGRESS']) |
+                Q(assigned_to=user)
+            ).distinct().order_by('-created_at')
+
+        return Auditory.objects.none()
+
+    # ---------------- PERMISSIONS ----------------
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAdmin()]
+        return [permissions.IsAuthenticated()]
+
+    # ---------------- CREATE ----------------
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    # ---------------- EVIDENCE HANDLER ----------------
+    def handle_evidence_upload(self, request, auditory):
+        if 'evidence' in request.FILES:
+            for f in request.FILES.getlist('evidence'):
+                AuditoryEvidence.objects.create(auditory=auditory, image=f)
+
+        if 'action_evidence' in request.FILES:
+            for f in request.FILES.getlist('action_evidence'):
+                AuditoryEvidence.objects.create(auditory=auditory, image=f)
+
+    # ================== ACTIONS ==================
+
+    # 🟢 TOMAR AUDITORÍA
+    @action(detail=True, methods=['post'])
+    def take(self, request, pk=None):
+        auditory = self.get_object()
+        user = request.user
+
+        if user.role != 'WAREHOUSE':
+            return Response({'detail': 'No autorizado'}, status=403)
+
+        if auditory.status != 'PENDING':
+            return Response({'detail': 'No disponible'}, status=400)
+
+        auditory.status = 'IN_PROGRESS'
+        auditory.in_progress_at = timezone.now()
+        auditory.assigned_to.add(user)
+        auditory.save()
+
+        return Response({'detail': 'Auditoría tomada'})
+
+    # 🟢 SUBIR EVIDENCIA
+    @action(detail=True, methods=['post'])
+    def upload_evidence(self, request, pk=None):
+        auditory = self.get_object()
+
+        if request.user not in auditory.assigned_to.all():
+            return Response({'detail': 'No autorizado'}, status=403)
+
+        self.handle_evidence_upload(request, auditory)
+        return Response({'detail': 'Evidencia subida'})
+
+    # 🟢 FINALIZAR AUDITORÍA (comments + action + DONE)
+    @action(detail=True, methods=['post'])
+    def finish(self, request, pk=None):
+        auditory = self.get_object()
+        user = request.user
+
+        if user not in auditory.assigned_to.all():
+            return Response({'detail': 'No autorizado'}, status=403)
+
+        if auditory.status != 'IN_PROGRESS':
+            return Response({'detail': 'No está en progreso'}, status=400)
+
+        comments = request.data.get('comments', '').strip()
+        if not comments:
+            return Response({'detail': 'Comentarios requeridos'}, status=400)
+
+        auditory.comments = comments
+        auditory.action = request.data.get('action')
+        auditory.status = 'DONE'
+        auditory.completed_at = timezone.now()
+        auditory.save()
+
+        return Response({'detail': 'Auditoría finalizada'})

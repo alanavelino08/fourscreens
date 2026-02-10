@@ -16,6 +16,10 @@ import MaterialHistory from "./pages/Warehouse/Materialhistory";
 import WithdrawalMaterial from "./pages/Warehouse/Withdrawal";
 import HotlistRequest from "./pages/Buyer/Hotlist";
 import MaterialScoreboard from "./pages/Quality/Materialscoreboard";
+import RawMaterial from "./pages/Warehouse/Rawmaterial";
+import ShimentDashboard from "./pages/Warehouse/Shipmentdashboard";
+import CalendarView from "./pages/Admin/CalendarView";
+import MaterialMetrics from "./pages/Quality/MaterialMetrics";
 
 function App() {
   return (
@@ -65,6 +69,33 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["ADMIN"]}>
               <WithdrawalMaterial showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/calendarView"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "WAREHOUSE"]}>
+              <CalendarView showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/shipmentdashboard"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN"]}>
+              <ShimentDashboard showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/materialmetrics"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN"]}>
+              <MaterialMetrics showAll={true} />
             </ProtectedRoute>
           }
         />
@@ -170,11 +201,20 @@ function App() {
           }
         />
 
+        <Route
+          path="/warehouse/rawmaterialregister"
+          element={
+            <ProtectedRoute allowedRoles={["WAREHOUSE"]}>
+              <RawMaterial showAll={true} />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Quality Routes */}
         <Route
           path="/quality/mapping"
           element={
-            <ProtectedRoute allowedRoles={["QUALITY"]}>
+            <ProtectedRoute allowedRoles={["QUALITY", "ADMIN"]}>
               <MappingMaterial showAll={true} />
             </ProtectedRoute>
           }
@@ -183,7 +223,7 @@ function App() {
         <Route
           path="/quality/scoreboardmaterial"
           element={
-            <ProtectedRoute allowedRoles={["QUALITY"]}>
+            <ProtectedRoute allowedRoles={["QUALITY", "ADMIN"]}>
               <MaterialScoreboard showAll={true} />
             </ProtectedRoute>
           }

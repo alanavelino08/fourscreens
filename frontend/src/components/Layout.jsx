@@ -36,6 +36,12 @@ import RuleFolderIcon from "@mui/icons-material/RuleFolder";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import StoreIcon from "@mui/icons-material/Store";
 import TableChartIcon from "@mui/icons-material/TableChart";
+import RadioButtonCheckedIcon from "@mui/icons-material/RadioButtonChecked";
+import RawOnIcon from "@mui/icons-material/RawOn";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import BarChartIcon from "@mui/icons-material/BarChart";
+import DonutSmallIcon from "@mui/icons-material/DonutSmall";
+import HighQualityIcon from "@mui/icons-material/HighQuality";
 
 import { useState } from "react";
 import { getCurrentUser, logout } from "../services/auth";
@@ -100,6 +106,16 @@ const Layout = () => {
               to: "/admin/dashboard",
               icon: <AssessmentIcon />,
             },
+            {
+              text: "Métricos embarques",
+              to: "/admin/shipmentdashboard",
+              icon: <BarChartIcon />,
+            },
+            // {
+            //   text: "Calendario",
+            //   to: "/admin/calendarView",
+            //   icon: <CalendarMonthIcon />,
+            // },
           ],
         },
         {
@@ -111,6 +127,40 @@ const Layout = () => {
               text: "Retirar material",
               to: "/admin/withdrawalmaterial",
               icon: <RuleFolderIcon />,
+            },
+          ],
+        },
+        {
+          text: "Incomming",
+          icon: <ReceiptLongIcon />,
+          key: "incoming",
+          subitems: [
+            {
+              text: "Ingreso Material",
+              to: "/quality/mapping",
+              icon: <AssignmentIcon />,
+            },
+            {
+              text: "Grafico de Ingreso",
+              to: "/quality/scoreboardmaterial",
+              icon: <TableChartIcon />,
+            },
+            {
+              text: "Métricos de material",
+              to: "/admin/materialmetrics",
+              icon: <DonutSmallIcon />,
+            },
+          ],
+        },
+        {
+          text: "Auditoria Calidad",
+          icon: <HighQualityIcon />,
+          key: "auditory",
+          subitems: [
+            {
+              text: "Calendario auditoria",
+              to: "/admin/calendarView",
+              icon: <CalendarMonthIcon />,
             },
           ],
         }
@@ -189,6 +239,18 @@ const Layout = () => {
           ],
         },
         {
+          text: "Auditoria Calidad",
+          icon: <HighQualityIcon />,
+          key: "auditory",
+          subitems: [
+            {
+              text: "Calendario auditoria",
+              to: "/admin/calendarView",
+              icon: <CalendarMonthIcon />,
+            },
+          ],
+        },
+        {
           text: "Incomming",
           icon: <ReceiptLongIcon />,
           key: "incoming",
@@ -205,6 +267,18 @@ const Layout = () => {
             },
           ],
         }
+        // {
+        //   text: "Raw Marterial",
+        //   icon: <RadioButtonCheckedIcon />,
+        //   key: "raw",
+        //   subitems: [
+        //     {
+        //       text: "Capturar RAW material",
+        //       to: "/warehouse/rawmaterialregister",
+        //       icon: <RawOnIcon />,
+        //     },
+        //   ],
+        // }
       );
     } else if (user.role === "BUYER") {
       // BUYER
@@ -231,6 +305,11 @@ const Layout = () => {
             text: "Ingreso Material",
             to: "/quality/mapping",
             icon: <AssignmentIcon />,
+          },
+          {
+            text: "Grafico de Ingreso",
+            to: "/quality/scoreboardmaterial",
+            icon: <TableChartIcon />,
           },
         ],
       });

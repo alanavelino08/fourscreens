@@ -6,6 +6,9 @@ from django.utils.timezone import now
 from django.utils import timezone
 from django.db import transaction, IntegrityError
 from django.core.validators import MinValueValidator
+import os
+import uuid
+from pathlib import Path
 
 #SHIPMENT AREA
 class User(AbstractUser):
@@ -324,6 +327,7 @@ class MaterialEntry(models.Model):
     STEP_FINALIZADO = 4
     STEP_DETENIDO = 5
     STEP_RECHAZADO = 6
+    STEP_UBICADO = 7
 
     STEP_CHOICES = [
         (STEP_INGRESO, "Ingreso"),
@@ -333,7 +337,20 @@ class MaterialEntry(models.Model):
         (STEP_FINALIZADO, "Finalizado"),
         (STEP_DETENIDO, "Detenido"),
         (STEP_RECHAZADO, "Rechazado"),
+        (STEP_UBICADO, "Ubicado")
     ]
+    
+    #Unique code
+    FOLIO_INC = "INC"
+    FOLIO_BUY = "BUY"
+
+    FOLIO_TYPES = [
+        (FOLIO_INC, "Incoming Material"),
+        (FOLIO_BUY, "Buyer Request"),
+    ]
+
+    folio = models.CharField(max_length=30, blank=True)
+    folio_type = models.CharField(max_length=10, choices=FOLIO_TYPES, default=FOLIO_INC)
     
     cod_art = models.CharField(max_length=50)
     descrip = models.TextField()
@@ -392,11 +409,109 @@ class MaterialEntry(models.Model):
     
     delivered_at = models.DateTimeField(blank=True, null=True)
     
+    located_at = models.DateTimeField(blank=True, null=True)
+    area = models.CharField(max_length=50, null=True, blank=True)
+    location = models.CharField(max_length=30, blank=True, null=True)
+    
     removed_at = models.DateTimeField(blank=True, null=True)
     #handle when the cone is red
     comments = models.TextField(blank=True, null=True)
     rma = models.BooleanField(default=False)
     income = models.BooleanField(default=False)
     
+    esplanade = models.CharField(max_length=30, blank=True, null=True)
+    
+    received_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="warehouse_received")
+    
+    def save(self, *args, **kwargs):
+        if not self.folio:
+            today = timezone.now().strftime("%Y%m%d")
+
+            prefix = self.folio_type  # INC o BUY
+
+            # Buscar último folio del día y tipo
+            last_entry = MaterialEntry.objects.filter(
+                folio__startswith=f"{prefix}-{today}"
+            ).order_by("-folio").first()
+
+            if last_entry:
+                last_number = int(last_entry.folio.split("-")[-1])
+                next_number = last_number + 1
+            else:
+                next_number = 1
+
+            self.folio = f"{prefix}-{today}-{next_number:04d}"
+
+        super().save(*args, **kwargs)
+    
     def __str__(self):
-        return f"{self.cod_art} - {self.quantity} by {self.user}"
+        return f"{self.folio} - {self.quantity} by {self.user}"
+
+#Auditory plan section
+def upload_path_evidence(instance, filename):
+    auditory = instance.auditory  # acceso al Auditory original
+    return str(Path("evidencias") / f"auditory_{auditory.folio}" / filename)
+
+    
+class WarehouseArea(models.Model):
+    area = models.CharField(max_length=50, unique=True)
+
+    def __str__(self):
+        return self.area
+
+    
+class Auditory(models.Model):
+    # Identificador único tipo folio
+    folio = models.CharField(max_length=20, unique=True, editable=False)
+
+    # Información básica
+    task = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    area = models.ForeignKey(WarehouseArea, on_delete=models.SET_NULL, null=True, related_name="auditories")
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="auditories_created")
+    assigned_to = models.ManyToManyField(User, related_name="auditories_assigned", limit_choices_to={'role': 'WAREHOUSE'}, blank=True)
+    # Campos que completará el usuario warehouse
+    comments = models.TextField(blank=True, null=True)
+    #evidence = models.ImageField(upload_to=upload_path_evidence, null=True, blank=True)
+    action = models.CharField(max_length=100, blank=True, null=True)
+    action_evidence = models.ImageField(upload_to=upload_path_evidence, null=True, blank=True)
+
+    # Fechas
+    created_at = models.DateTimeField(auto_now_add=True)
+    scheduled_date = models.DateField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    in_progress_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Estado de la tarea
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('DONE', 'Done'),
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+
+    def __str__(self):
+        return f"{self.folio} - {self.task}"
+
+    def save(self, *args, **kwargs):
+        # Asignar un folio automático si no existe
+        if not self.folio:
+            if self.area:
+                area_name = self.area.area
+            else:
+                area_name = "NA"
+            self.folio = f"AUD-{area_name}-{str(uuid.uuid4())[:4].upper()}"
+        
+        super().save(*args, **kwargs)
+
+    def generate_folio(self):
+        prefix = "AUD"
+        area = self.area.area if self.area else "NA"
+        unique_id = str(uuid.uuid4())[:4].upper()
+        return f"{prefix}-{area}-{unique_id}"
+    
+class AuditoryEvidence(models.Model):
+    auditory = models.ForeignKey(Auditory, related_name="evidences", on_delete=models.CASCADE)
+    image = models.ImageField(upload_to=upload_path_evidence, null=True, blank=True)

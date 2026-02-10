@@ -34,6 +34,8 @@ import {
   RadioGroup,
   Radio,
   InputLabel,
+  InputAdornment,
+  Stack,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -48,6 +50,10 @@ import { getCurrentUser } from "../../services/auth";
 import dayjs from "dayjs";
 import isoWeek from "dayjs/plugin/isoWeek";
 dayjs.extend(isoWeek);
+import smtLocations from "./locations";
+import backendLocations from "./backendlocations";
+import NavigationIcon from "@mui/icons-material/Navigation";
+import PlaceIcon from "@mui/icons-material/Place";
 
 const PedidoViewer = (open, entry) => {
   const [user, setUser] = useState(null);
@@ -95,6 +101,7 @@ const PedidoViewer = (open, entry) => {
 
         const formattedRows = results.map((item, index) => ({
           id: index + 1,
+          folio: item.folio,
           cod_art: item.cod_art,
           cant_ped: item.cant_ped,
           des_art: item.descrip,
@@ -188,9 +195,9 @@ const PedidoViewer = (open, entry) => {
   const [entries, setEntries] = useState([]);
   const [docDialogOpen, setDocDialogOpen] = useState(false); // para documentos
   const [materialDialogOpen, setMaterialDialogOpen] = useState(false); // para material
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false); // paara todos los detalles
-  const [mailDialogOpen, setMailDialogOpen] = useState(false);
-  const [rejectedDialogOpen, setRejectedDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false); // para todos los detalles
+  const [mailDialogOpen, setMailDialogOpen] = useState(false); // mandar correo a compras
+  const [rejectedDialogOpen, setRejectedDialogOpen] = useState(false); //Rechazo de material
   const [selectedEntry, setSelectedEntry] = useState(null);
 
   const [currentEntryId, setCurrentEntryId] = useState(null);
@@ -262,7 +269,7 @@ const PedidoViewer = (open, entry) => {
     return 0;
   };
 
-  const visibleEntries = entries.filter((item) => !item.delivered_at);
+  //const visibleEntries = entries.filter((item) => !item.delivered_at);
 
   const [isPnOk, setIsPnOk] = useState(false);
   const [isPnSuppOk, setIsPnSuppOk] = useState(false);
@@ -281,6 +288,13 @@ const PedidoViewer = (open, entry) => {
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const currentEntry = entries.find((e) => e.id === currentEntryId);
+  const [selectedEsplanade, setSelectedEsplanade] = useState("");
+
+  const openDeliverDialog = (entryId) => {
+    setPendingEntryId(entryId);
+    setSelectedEsplanade("");
+    setOpenDialog(true);
+  };
 
   //Show all current lines to add in WH
   const fetchEntries = async () => {
@@ -313,7 +327,8 @@ const PedidoViewer = (open, entry) => {
       docDialogOpen ||
       materialDialogOpen ||
       qualityDialogOpen ||
-      rejectedDialogOpen
+      rejectedDialogOpen ||
+      openDialog
     )
       return;
 
@@ -333,7 +348,7 @@ const PedidoViewer = (open, entry) => {
   ]);
 
   const colorMap = {
-    white: "gray",
+    white: "#E0D7D3",
     yellow: "yellow",
     green: "green",
     black: "black",
@@ -423,14 +438,96 @@ const PedidoViewer = (open, entry) => {
 
   const isWarehouseUser = user?.role === "WAREHOUSE";
   const isQualityUser = user?.role === "QUALITY";
+  const isAdmin = user?.role === "ADMIN";
   //const isBuyer = user?.role === "BUYER";
 
   //Delivering material
-  const handleDeliver = async (entryId) => {
-    try {
-      const response = await api.post(`/entries/${entryId}/finalize-green/`);
+  // const handleDeliver = async (entryId) => {
+  //   try {
+  //     const response = await api.post(`/entries/${entryId}/finalize-green/`);
 
-      // actualizar lista de entries en el estado
+  //     // actualizar lista de entries en el estado
+  //     setEntries((prev) =>
+  //       prev.map((item) =>
+  //         item.id === entryId
+  //           ? {
+  //               ...item,
+  //               cone: null,
+  //               current_step: response.data.current_step,
+  //               delivered_at: response.data.delivered_at,
+  //             }
+  //           : item
+  //       )
+  //     );
+
+  //     // mostrar snackbar éxito
+  //     setFeedback({
+  //       open: true,
+  //       message: "✅ Material entregado y cono liberado",
+  //       severity: "success",
+  //     });
+  //   } catch (error) {
+  //     console.error("Error al entregar:", error);
+
+  //     setFeedback({
+  //       open: true,
+  //       message:
+  //         error.response?.data?.detail || "❌ No se pudo entregar el material",
+  //       severity: "error",
+  //     });
+  //   }
+  // };
+  // const handleDeliver = async (entryId, userId, receivedAt) => {
+  //   try {
+  //     const response = await api.post(`/entries/${entryId}/finalize-green/`, {
+  //       received_by: userId,
+  //       received_at: receivedAt,
+  //     });
+
+  //     setEntries((prev) =>
+  //       prev.map((item) =>
+  //         item.id === entryId
+  //           ? {
+  //               ...item,
+  //               cone: null,
+  //               current_step: response.data.current_step,
+  //               delivered_at: response.data.delivered_at,
+  //               received_at: response.data.received_at,
+  //               received_by: response.data.received_by,
+  //             }
+  //           : item
+  //       )
+  //     );
+
+  //     setFeedback({
+  //       open: true,
+  //       message: "✅ Material entregado, cono liberado y listo para liberar",
+  //       severity: "success",
+  //     });
+  //   } catch (error) {
+  //     console.error("Error al entregar:", error);
+
+  //     setFeedback({
+  //       open: true,
+  //       message:
+  //         error.response?.data?.detail || "❌ No se pudo entregar el material",
+  //       severity: "error",
+  //     });
+  //   }
+  // };
+  // const confirmDeliver = () => {
+  //   if (!selectedUser || !receivedAt) return;
+
+  //   handleDeliver(pendingEntryId, selectedUser, receivedAt);
+  //   setOpenDialog(false);
+  // };
+
+  const handleDeliver = async (entryId, esplanade) => {
+    try {
+      const response = await api.post(`/entries/${entryId}/finalize-green/`, {
+        esplanade,
+      });
+
       setEntries((prev) =>
         prev.map((item) =>
           item.id === entryId
@@ -439,27 +536,33 @@ const PedidoViewer = (open, entry) => {
                 cone: null,
                 current_step: response.data.current_step,
                 delivered_at: response.data.delivered_at,
+                esplanade: response.data.esplanade,
               }
-            : item
-        )
+            : item,
+        ),
       );
 
-      // mostrar snackbar éxito
       setFeedback({
         open: true,
-        message: "✅ Material entregado y cono liberado",
+        message: "✅ Material enviado a explanada correctamente",
         severity: "success",
       });
     } catch (error) {
-      console.error("Error al entregar:", error);
-
+      console.error(error);
       setFeedback({
         open: true,
         message:
-          error.response?.data?.detail || "❌ No se pudo entregar el material",
+          error.response?.data?.detail || "❌ No se pudo finalizar el material",
         severity: "error",
       });
     }
+  };
+
+  const confirmDeliver = () => {
+    if (!selectedEsplanade) return;
+
+    handleDeliver(pendingEntryId, selectedEsplanade);
+    setOpenDialog(false);
   };
 
   //Correo
@@ -483,7 +586,7 @@ const PedidoViewer = (open, entry) => {
     Número de la factura: 
     Números de parte: 
 
-    Gracias de antemano, quedamos en espera de su respuesta.`
+    Gracias de antemano, quedamos en espera de su respuesta.`,
   );
 
   // Fetch buyers on load
@@ -502,7 +605,7 @@ const PedidoViewer = (open, entry) => {
       setSubject(
         `PO: ${selectedEntry.order || ""} - N° de parte: ${
           selectedEntry.cod_art
-        } - Guía: ${selectedEntry.request_guide}`
+        } - Guía: ${selectedEntry.request_guide}`,
       );
     }
   }, [selectedEntry]);
@@ -538,7 +641,7 @@ const PedidoViewer = (open, entry) => {
           option: rejectedOption,
           comment: rejectedComment,
           user: user?.id || null,
-        }
+        },
       );
 
       if (response.data.removed) {
@@ -558,8 +661,8 @@ const PedidoViewer = (open, entry) => {
                   },
                   rejected_at: null,
                 }
-              : e
-          )
+              : e,
+          ),
         );
       }
 
@@ -629,14 +732,14 @@ const PedidoViewer = (open, entry) => {
     if (expDate.isAfter(now)) {
       return {
         message: `✅ Vigente. Fecha fabricación: ${baseDate.format(
-          "YYYY-MM-DD"
+          "YYYY-MM-DD",
         )}. Vence: ${expDate.format("YYYY-MM-DD")}`,
         expired: false,
       };
     } else {
       return {
         message: `❌ Expirado. Fecha fabricación: ${baseDate.format(
-          "YYYY-MM-DD"
+          "YYYY-MM-DD",
         )}. Venció: ${expDate.format("YYYY-MM-DD")}`,
         expired: true,
       };
@@ -650,101 +753,210 @@ const PedidoViewer = (open, entry) => {
     }
   }, [materialDialogOpen]);
 
+  //Dialog to deliver the material
+  const [openDialog, setOpenDialog] = useState(false);
+  const [warehouseUsers, setWarehouseUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState("");
+  const [receivedAt, setReceivedAt] = useState("");
+  const [pendingEntryId, setPendingEntryId] = useState(null);
+
+  //Dialog to allocate material
+  const [locateDialogOpen, setLocateDialogOpen] = useState(false);
+  const [selectedLocEntry, setSelectedLocEntry] = useState(null);
+  const [locationInput, setLocationInput] = useState("");
+
+  const [selectedArea, setSelectedArea] = useState("");
+  const [locationsList, setLocationsList] = useState([]);
+
+  const handleAreaChange = (e) => {
+    const area = e.target.value;
+    setSelectedArea(area);
+
+    if (area === "SMT") {
+      setLocationsList(smtLocations);
+    } else if (area === "BACKEND") {
+      setLocationsList(backendLocations);
+    } else {
+      setLocationsList([]);
+    }
+  };
+
+  const openLocateDialog = (entry) => {
+    setSelectedLocEntry(entry);
+    setLocationInput("");
+    setLocateDialogOpen(true);
+  };
+
+  // const openDeliverDialog = async (entryId) => {
+  //   try {
+  //     setPendingEntryId(entryId);
+
+  //     const response = await api.get("/users/?role=WAREHOUSE")
+  //     setWarehouseUsers(response.data);
+
+  //     setReceivedAt(new Date().toISOString().slice(0, 16)); // fecha actual para datetime-local
+  //     setOpenDialog(true);
+  //   } catch (error) {
+  //     console.error(error);
+  //     setFeedback({
+  //       open: true,
+  //       message: "❌ No se pudieron cargar los usuarios",
+  //       severity: "error",
+  //     });
+  //   }
+  // };
+  // const openDeliverDialog = async (entryId) => {
+  //   try {
+  //     setPendingEntryId(entryId);
+
+  //     const response = await api.get("/users/?role=WAREHOUSE");
+
+  //     // si tu backend usa paginación, los usuarios vienen en data.results
+  //     const users = Array.isArray(response.data.results)
+  //       ? response.data.results
+  //       : response.data; // fallback por si no paginas
+
+  //     setWarehouseUsers(users);
+
+  //     setReceivedAt(new Date().toISOString().slice(0, 16));
+  //     setOpenDialog(true);
+  //   } catch (error) {
+  //     console.error(error);
+  //     setFeedback({
+  //       open: true,
+  //       message: "❌ No se pudieron cargar los usuarios",
+  //       severity: "error",
+  //     });
+  //   }
+  // };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" gutterBottom>
         <strong>Recibo Incoming</strong>
       </Typography>
-      <Accordion defaultExpanded>
-        <AccordionSummary
-          expandIcon={<ExpandMoreIcon />}
-          aria-controls="panel3-content"
-          id="panel3-header"
-        >
-          <Typography component="span">
-            <strong>Ingresar Material</strong>
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          <TextField
-            label="Buscar PO"
-            value={pedido}
-            onChange={(e) => setPedido(e.target.value)}
-            onKeyDown={handleKeyDown}
-            fullWidth
-            sx={{ mb: 2 }}
-            inputRef={inputRef}
-          />
-          {loading && (
-            <Box display="flex" justifyContent="center" sx={{ my: 2 }}>
-              <CircularProgress size={24} />
-            </Box>
-          )}
 
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            loading={loading}
-            pageSize={10}
-            rowsPerPageOptions={[10]}
-            checkboxSelection
-            disableRowSelectionOnClick
-            sx={{ mb: 2 }}
-            onRowSelectionModelChange={(newSelectionModel) => {
-              console.log("Seleccionados:", newSelectionModel);
-              setSelectedRows(newSelectionModel);
-            }}
-          />
-        </AccordionDetails>
-        <AccordionActions>
-          <Button onClick={handleReset}>Resetear</Button>
-          <Button onClick={handleGuardarLineas}>Agregar líneas</Button>
-        </AccordionActions>
-      </Accordion>
+      {/* To enter material */}
+      {isQualityUser && (
+        <Accordion defaultExpanded>
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon />}
+            aria-controls="panel3-content"
+            id="panel3-header"
+          >
+            <Typography component="span">
+              <strong>Ingresar Material</strong>
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <TextField
+              label="Buscar PO"
+              value={pedido}
+              onChange={(e) => setPedido(e.target.value)}
+              onKeyDown={handleKeyDown}
+              fullWidth
+              sx={{ mb: 2 }}
+              inputRef={inputRef}
+            />
+            {loading && (
+              <Box display="flex" justifyContent="center" sx={{ my: 2 }}>
+                <CircularProgress size={24} />
+              </Box>
+            )}
+
+            <DataGrid
+              rows={rows}
+              columns={columns}
+              loading={loading}
+              pageSize={10}
+              rowsPerPageOptions={[10]}
+              checkboxSelection
+              disableRowSelectionOnClick
+              sx={{ mb: 2 }}
+              onRowSelectionModelChange={(newSelectionModel) => {
+                console.log("Seleccionados:", newSelectionModel);
+                setSelectedRows(newSelectionModel);
+              }}
+            />
+          </AccordionDetails>
+          <AccordionActions>
+            <Button onClick={handleReset}>Resetear</Button>
+            <Button onClick={handleGuardarLineas}>Agregar líneas</Button>
+          </AccordionActions>
+        </Accordion>
+      )}
 
       {/* Material added */}
-      <Accordion>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography>
-            <strong>Material Ingresado</strong>
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          <Grid container spacing={2}>
-            {/* {sortedEntries.map((entry, index) => { */}
-            {sortedEntries
-              .filter((entry) => !entry.delivered_at && !entry.removed_at)
-              .map((entry, index) => {
-                const color = entry.cone?.color || "white";
-                const isBlocked = sortedEntries.some(
-                  (e, i) =>
-                    i < index && !e.released_at && !e.rejected_at && e.onhold_at
-                );
+      {!isWarehouseUser && (
+        <Accordion defaultExpanded>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography>
+              <strong>Material Ingresado</strong>
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Grid container spacing={2}>
+              {/* {sortedEntries.map((entry, index) => { */}
+              {sortedEntries
+                .filter((entry) => !entry.delivered_at && !entry.removed_at)
+                .map((entry, index) => {
+                  const color = entry.cone?.color || "white";
+                  const isBlocked = sortedEntries.some(
+                    (e, i) =>
+                      i < index &&
+                      !e.released_at &&
+                      !e.rejected_at &&
+                      e.onhold_at,
+                  );
 
-                return (
-                  <Grid item xs={12} key={entry.id}>
-                    <Box border={1} borderRadius={2} p={2}>
-                      <Grid container alignItems="center" spacing={2}>
-                        <Grid item>
-                          <strong>{entry.cone?.number}</strong>
-                          <Tooltip
-                            title={`Cono ${translateColor(
-                              entry.cone?.color
-                            )}: N° ${entry.cone?.number || "sin número"}`}
-                            placement="bottom-start"
-                          >
-                            <ChangeHistoryIcon
-                              sx={{ fontSize: 60, color: colorMap[color] }}
-                            />
-                          </Tooltip>
-                        </Grid>
+                  return (
+                    <Grid item xs={12} key={entry.id}>
+                      <Box border={1} borderRadius={2} p={2}>
+                        <Grid container alignItems="center" spacing={2}>
+                          <Grid item>
+                            <strong>{entry.cone?.number}</strong>
+                            <Tooltip
+                              title={`Cono ${translateColor(
+                                entry.cone?.color,
+                              )}: N° ${entry.cone?.number || "sin número"}`}
+                              placement="bottom-start"
+                            >
+                              <NavigationIcon
+                                sx={{ fontSize: 60, color: colorMap[color] }}
+                              />
+                            </Tooltip>
+                          </Grid>
 
-                        <Grid item xs>
-                          <Typography variant="subtitle2" display="block">
-                            <strong>PO: </strong>
-                            {entry.order}
-
-                            {entry.is_urgent && (
+                          <Grid item xs>
+                            <Typography>
+                              <strong>Folio: </strong>
+                              {entry.folio}
+                              {entry.is_urgent && (
+                                <Tooltip title="Material Urgente">
+                                  <NewReleasesIcon
+                                    sx={{ color: "red", ml: 1 }}
+                                  />
+                                </Tooltip>
+                              )}
+                              {entry.validation_at &&
+                                (!entry.released_at ? (
+                                  <Tooltip title="En espera de validación Calidad">
+                                    <MarkEmailUnreadIcon
+                                      sx={{ color: "#F76719", ml: 1 }}
+                                    />
+                                  </Tooltip>
+                                ) : (
+                                  <Tooltip title="Validado y liberado por Calidad">
+                                    <VerifiedIcon
+                                      sx={{ color: "#4CAF50", ml: 1 }}
+                                    />
+                                  </Tooltip>
+                                ))}
+                            </Typography>
+                            <Typography variant="subtitle2" display="block">
+                              <strong> PO: </strong>
+                              {entry.order}
+                              {/* {entry.is_urgent && (
                               <Tooltip title="Material Urgente">
                                 <NewReleasesIcon sx={{ color: "red", ml: 1 }} />
                               </Tooltip>
@@ -762,38 +974,43 @@ const PedidoViewer = (open, entry) => {
                                     sx={{ color: "#4CAF50", ml: 1 }}
                                   />
                                 </Tooltip>
+                              ))} */}
+                            </Typography>
+
+                            <Typography variant="subtitle2">
+                              <strong>Ingresado por:</strong>{" "}
+                              {/* {entry.user.first_name} {entry.user.last_name} -{" "} */}
+                              {entry.user
+                                ? `${entry.user.first_name} ${entry.user.last_name}`
+                                : "En Espera de"}{" "}
+                              - <strong>En fecha: </strong>
+                              {new Date(entry.created_at).toLocaleString(
+                                "es-MX",
+                              )}
+                            </Typography>
+
+                            <Typography variant="subtitle2">
+                              <strong>P/N:</strong> {entry.cod_art} -{" "}
+                              <strong>QTY:</strong> {entry.quantity} -{" "}
+                              <strong>P/N Proveedor: </strong>
+                              {entry.supplier_name}
+                            </Typography>
+                            <Typography variant="caption" display="block">
+                              <strong>{entry.descrip}</strong>
+                            </Typography>
+
+                            <Stepper
+                              activeStep={mapStep(entry)}
+                              alternativeLabel
+                            >
+                              {steps.map((label) => (
+                                <Step key={label}>
+                                  <StepLabel>{label}</StepLabel>
+                                </Step>
                               ))}
-                          </Typography>
+                            </Stepper>
 
-                          <Typography variant="subtitle2">
-                            <strong>Ingresado por:</strong>{" "}
-                            {/* {entry.user.first_name} {entry.user.last_name} -{" "} */}
-                            {entry.user
-                              ? `${entry.user.first_name} ${entry.user.last_name}`
-                              : "En Espera de"}{" "}
-                            - <strong>En fecha: </strong>
-                            {new Date(entry.created_at).toLocaleString("es-MX")}
-                          </Typography>
-
-                          <Typography variant="subtitle2">
-                            <strong>P/N:</strong> {entry.cod_art} -{" "}
-                            <strong>QTY:</strong> {entry.quantity} -{" "}
-                            <strong>P/N Proveedor: </strong>
-                            {entry.supplier_name}
-                          </Typography>
-                          <Typography variant="caption" display="block">
-                            <strong>{entry.descrip}</strong>
-                          </Typography>
-
-                          <Stepper activeStep={mapStep(entry)} alternativeLabel>
-                            {steps.map((label) => (
-                              <Step key={label}>
-                                <StepLabel>{label}</StepLabel>
-                              </Step>
-                            ))}
-                          </Stepper>
-
-                          {/* <Stepper
+                            {/* <Stepper
                             activeStep={
                               typeof entry.current_step === "number"
                                 ? mapStep(entry.current_step)
@@ -807,7 +1024,7 @@ const PedidoViewer = (open, entry) => {
                               </Step>
                             ))}
                           </Stepper> */}
-                          {/* <Stepper
+                            {/* <Stepper
                             activeStep={
                               typeof entry.current_step === "number"
                                 ? mapStep(entry)
@@ -822,159 +1039,341 @@ const PedidoViewer = (open, entry) => {
                             ))}
                           </Stepper> */}
 
-                          {entry.released_at ? (
-                            <Button
-                              variant="contained"
-                              color="success"
-                              onClick={() => {
-                                // Lógica para entregar
-                                handleDeliver(entry.id);
-                              }}
-                              sx={{ mt: 2 }}
-                            >
-                              Entregar
-                            </Button>
-                          ) : entry.is_rejected ? (
-                            <Button
-                              variant="contained"
-                              color="error"
-                              onClick={() => {
-                                setCurrentEntryId(entry.id);
-                                setRejectedDialogOpen(true);
-                              }}
-                              sx={{ mt: 2 }}
-                            >
-                              Rechazado
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="contained"
-                              onClick={() => {
-                                setCurrentEntryId(entry.id);
-                                setIsPo(entry.is_po || false);
-                                setGuideInput(entry.guideInput || "");
-                                setInvoiceNumber(entry.invoiceNumber || "");
-                                setSupplierName(entry.supplierName || "");
-                                setIsInvoice(entry.is_invoice || false);
-                                setIsPnOk(entry.is_pn_ok || false);
-                                setIsPnSuppOk(entry.is_pn_supp_ok || false);
-                                setIsQtyOk(entry.is_qty_ok || false);
-                                setDateCode(entry.date_code || "");
-                                setIsLabelAttached(
-                                  entry.is_label_attached || false
-                                );
-
-                                // Abrir diálogo acorde al color actual y rol
-                                if (entry.cone?.color === "white") {
-                                  if (isWarehouseUser) {
-                                    setDocDialogOpen(true);
+                            {entry.released_at ? (
+                              <Button
+                                variant="contained"
+                                color="success"
+                                onClick={() => {
+                                  if (isQualityUser) {
+                                    openDeliverDialog(entry.id);
                                   } else {
                                     setFeedback({
                                       open: true,
                                       message:
-                                        "Solo el usuario almacén puede validar documentos.",
+                                        "Solo el usuario incoming puede entregar material.",
                                       severity: "warning",
                                     });
                                   }
-                                } else if (entry.cone?.color === "yellow") {
-                                  if (isWarehouseUser) {
-                                    if (entry.current_step === 1) {
-                                      // Primera vez en validación de material
-                                      setMaterialDialogOpen(true);
+                                }}
+                                sx={{ mt: 2 }}
+                              >
+                                Explanada
+                              </Button>
+                            ) : entry.is_rejected ? (
+                              <Button
+                                variant="contained"
+                                color="error"
+                                onClick={() => {
+                                  setCurrentEntryId(entry.id);
+                                  setRejectedDialogOpen(true);
+                                }}
+                                sx={{ mt: 2 }}
+                              >
+                                Rechazado
+                              </Button>
+                            ) : (
+                              // <Button
+                              //   variant="contained"
+                              //   onClick={() => {
+                              //     setCurrentEntryId(entry.id);
+                              //     setIsPo(entry.is_po || false);
+                              //     setGuideInput(entry.guideInput || "");
+                              //     setInvoiceNumber(entry.invoiceNumber || "");
+                              //     setSupplierName(entry.supplierName || "");
+                              //     setIsInvoice(entry.is_invoice || false);
+                              //     setIsPnOk(entry.is_pn_ok || false);
+                              //     setIsPnSuppOk(entry.is_pn_supp_ok || false);
+                              //     setIsQtyOk(entry.is_qty_ok || false);
+                              //     setDateCode(entry.date_code || "");
+                              //     setIsLabelAttached(
+                              //       entry.is_label_attached || false
+                              //     );
+
+                              //     // Abrir diálogo acorde al color actual y rol
+                              //     if (entry.cone?.color === "white") {
+                              //       if (isWarehouseUser) {
+                              //         setDocDialogOpen(true);
+                              //       } else {
+                              //         setFeedback({
+                              //           open: true,
+                              //           message:
+                              //             "Solo el usuario almacén puede validar documentos.",
+                              //           severity: "warning",
+                              //         });
+                              //       }
+                              //     } else if (entry.cone?.color === "yellow") {
+                              //       if (isWarehouseUser) {
+                              //         if (entry.current_step === 1) {
+                              //           // Primera vez en validación de material
+                              //           setMaterialDialogOpen(true);
+                              //         } else {
+                              //           // Ya pasó material → pendiente calidad
+                              //           setFeedback({
+                              //             open: true,
+                              //             message:
+                              //               "Pendiente validación de calidad.",
+                              //             severity: "warning",
+                              //           });
+                              //         }
+                              //       } else if (
+                              //         isQualityUser &&
+                              //         entry.current_step === 2
+                              //       ) {
+                              //         setQualityDialogOpen(true);
+                              //       } else {
+                              //         setFeedback({
+                              //           open: true,
+                              //           message: isQualityUser
+                              //             ? "La validación de calidad aún no está lista para este material."
+                              //             : "No tienes permiso para esta etapa.",
+                              //           severity: "warning",
+                              //         });
+                              //       }
+                              //     } else if (entry.cone?.color === "black") {
+                              //       // Caso cono negro: permitir que avance a documentos
+                              //       if (isWarehouseUser) {
+                              //         setDocDialogOpen(true);
+                              //       } else {
+                              //         setFeedback({
+                              //           open: true,
+                              //           message:
+                              //             "Solo WAREHOUSE puede iniciar la validación desde cono negro.",
+                              //           severity: "warning",
+                              //         });
+                              //       }
+                              //     }
+                              //     // else if (entry.cone?.color === "red") {
+                              //     //   setMaterialDialogOpen(true);
+                              //     // }
+                              //   }}
+                              //   //disabled={isBlocked || loading}
+                              //   sx={{ mt: 2 }}
+                              // >
+                              //   Siguiente
+                              // </Button>
+                              <Button
+                                variant="contained"
+                                onClick={() => {
+                                  setCurrentEntryId(entry.id);
+                                  setIsPo(entry.is_po || false);
+                                  setGuideInput(entry.guideInput || "");
+                                  setInvoiceNumber(entry.invoiceNumber || "");
+                                  setSupplierName(entry.supplierName || "");
+                                  setIsInvoice(entry.is_invoice || false);
+                                  setIsPnOk(entry.is_pn_ok || false);
+                                  setIsPnSuppOk(entry.is_pn_supp_ok || false);
+                                  setIsQtyOk(entry.is_qty_ok || false);
+                                  setDateCode(entry.date_code || "");
+                                  setIsLabelAttached(
+                                    entry.is_label_attached || false,
+                                  );
+
+                                  // Abrir diálogo acorde al color actual y rol
+                                  if (entry.cone?.color === "white") {
+                                    if (isQualityUser) {
+                                      //aquí va usuario de almacen
+                                      setDocDialogOpen(true);
                                     } else {
-                                      // Ya pasó material → pendiente calidad
                                       setFeedback({
                                         open: true,
                                         message:
-                                          "Pendiente validación de calidad.",
+                                          "Solo el usuario incoming puede validar documentos.",
                                         severity: "warning",
                                       });
                                     }
-                                  } else if (
-                                    isQualityUser &&
-                                    entry.current_step === 2
-                                  ) {
-                                    setQualityDialogOpen(true);
-                                  } else {
-                                    setFeedback({
-                                      open: true,
-                                      message: isQualityUser
-                                        ? "La validación de calidad aún no está lista para este material."
-                                        : "No tienes permiso para esta etapa.",
-                                      severity: "warning",
-                                    });
-                                  }
-                                } else if (entry.cone?.color === "black") {
-                                  // Caso cono negro: permitir que avance a documentos
-                                  if (isWarehouseUser) {
-                                    setDocDialogOpen(true);
-                                  } else {
-                                    setFeedback({
-                                      open: true,
-                                      message:
-                                        "Solo WAREHOUSE puede iniciar la validación desde cono negro.",
-                                      severity: "warning",
-                                    });
-                                  }
-                                }
-                                // else if (entry.cone?.color === "red") {
-                                //   setMaterialDialogOpen(true);
-                                // }
-                              }}
-                              //disabled={isBlocked || loading}
-                              sx={{ mt: 2 }}
-                            >
-                              Siguiente
-                            </Button>
-                          )}
+                                  } else if (entry.cone?.color === "yellow") {
+                                    if (isQualityUser) {
+                                      if (entry.current_step === 1) {
+                                        // Primera vez en validación de material
+                                        setMaterialDialogOpen(true);
+                                      } else if (entry.current_step === 2) {
+                                        // Etapa de validación de calidad
+                                        setQualityDialogOpen(true);
+                                      } else {
+                                        setFeedback({
+                                          open: true,
+                                          message:
+                                            "Etapa no reconocida para calidad.",
+                                          severity: "warning",
+                                        });
+                                      }
+                                    } else {
+                                      // Si no es usuario de calidad
+                                      setFeedback({
+                                        open: true,
+                                        message:
+                                          "No tienes permiso para esta etapa.",
+                                        severity: "warning",
+                                      });
+                                    }
 
-                          {/* <Tooltip title="Ver más detalles">
-                            <IconButton
-                              size="large"
-                              onClick={() => 
-                                setDetailsDialogOpen(true)}
-                            >
-                              <VisibilityIcon fontSize="inherit" />
-                            </IconButton>
-                          </Tooltip> */}
-                          <Tooltip title="Ver más detalles">
-                            <IconButton
-                              size="large"
-                              onClick={() => {
-                                setSelectedEntry(entry); // guardamos la info del entry actual
-                                setDetailsDialogOpen(true); // abrimos el diálogo
-                              }}
-                            >
-                              <VisibilityIcon fontSize="inherit" />
-                            </IconButton>
-                          </Tooltip>
+                                    // else if (entry.cone?.color === "yellow") {
+                                    //   if (isQualityUser) { // aqui va usuario de almacen
+                                    //     if (entry.current_step === 1) {
+                                    //       // Primera vez en validación de material
+                                    //       setMaterialDialogOpen(true);
+                                    //     } else {
+                                    //       // Ya pasó material → pendiente calidad
+                                    //       setFeedback({
+                                    //         open: true,
+                                    //         message:
+                                    //           "Pendiente validación de calidad.",
+                                    //         severity: "warning",
+                                    //       });
+                                    //     }
+                                    //   } else if (
+                                    //     isQualityUser &&
+                                    //     entry.current_step === 2
+                                    //   ) {
+                                    //     setQualityDialogOpen(true);
+                                    //   } else {
+                                    //     setFeedback({
+                                    //       open: true,
+                                    //       message: isQualityUser
+                                    //         ? "La validación de calidad aún no está lista para este material."
+                                    //         : "No tienes permiso para esta etapa.",
+                                    //       severity: "warning",
+                                    //     });
+                                    //   }
+                                  } else if (entry.cone?.color === "black") {
+                                    // Caso cono negro: permitir que avance a documentos
+                                    if (isQualityUser) {
+                                      //aqui va usuario almacen
+                                      setDocDialogOpen(true);
+                                    } else {
+                                      setFeedback({
+                                        open: true,
+                                        message:
+                                          "Solo WAREHOUSE puede iniciar la validación desde cono negro.",
+                                        severity: "warning",
+                                      });
+                                    }
+                                  }
+                                  // else if (entry.cone?.color === "red") {
+                                  //   setMaterialDialogOpen(true);
+                                  // }
+                                }}
+                                //disabled={isBlocked || loading}
+                                sx={{ mt: 2 }}
+                              >
+                                Siguiente
+                              </Button>
+                            )}
 
-                          {entry.cone?.color === "black" && (
-                            <Typography
-                            // color="warning.main"
-                            // variant="body2"
-                            // sx={{ mt: 1 }}
-                            >
-                              <Button
-                                color="error"
+                            <Tooltip title="Ver más detalles">
+                              <IconButton
+                                size="large"
                                 onClick={() => {
                                   setSelectedEntry(entry);
-                                  setMailDialogOpen(true);
+                                  setDetailsDialogOpen(true);
                                 }}
                               >
-                                ⚠️ En espera de documentos - Cono negro asignado
-                              </Button>
-                            </Typography>
-                          )}
+                                <VisibilityIcon fontSize="inherit" />
+                              </IconButton>
+                            </Tooltip>
+
+                            {entry.cone?.color === "black" && (
+                              <Typography>
+                                <Button
+                                  color="error"
+                                  onClick={() => {
+                                    setSelectedEntry(entry);
+                                    setMailDialogOpen(true);
+                                  }}
+                                >
+                                  ⚠️ En espera de documentos - Cono negro
+                                  asignado
+                                </Button>
+                              </Typography>
+                            )}
+                          </Grid>
                         </Grid>
-                      </Grid>
+                      </Box>
+                    </Grid>
+                  );
+                })}
+            </Grid>
+          </AccordionDetails>
+        </Accordion>
+      )}
+
+      {/* Items delivered to allocate */}
+      {/* {!isQualityUser && (
+        <Accordion defaultExpanded>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography>
+              <strong>Items entregados pendientes de Ubicación</strong>
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Grid container spacing={2}>
+              {sortedEntries
+                .filter(
+                  (entry) =>
+                    entry.delivered_at &&
+                    !entry.located_at &&
+                    !entry.removed_at,
+                )
+                .map((entry) => (
+                  <Grid item xs={12} key={entry.id}>
+                    <Box
+                      border={1}
+                      borderRadius={2}
+                      p={2}
+                      sx={{
+                        height: 220,
+                        overflow: "auto",
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <Typography noWrap>
+                        <strong>Folio:</strong> {entry.folio}
+                      </Typography>
+                      <Typography noWrap>
+                        <strong>P/N:</strong> {entry.cod_art}
+                      </Typography>
+                      <Typography noWrap>
+                        <strong>Desc:</strong> {entry.descrip}
+                      </Typography>
+                      <Typography noWrap>
+                        <strong>QTY:</strong> {entry.quantity}
+                      </Typography>
+                      <Typography noWrap>
+                        <strong>Explanada:</strong> {entry.esplanade}
+                      </Typography>
+                      <Typography noWrap>
+                        <strong>Fecha entrega:</strong>{" "}
+                        {new Date(entry.delivered_at).toLocaleString("es-MX")}
+                      </Typography>
+
+                      <Button
+                        variant="contained"
+                        color="success"
+                        startIcon={<PlaceIcon />}
+                        sx={{ mt: "auto" }}
+                        onClick={() => {
+                          if (isWarehouseUser) {
+                            openLocateDialog(entry);
+                          } else {
+                            setFeedback({
+                              open: true,
+                              message:
+                                "Solo el usuario almacén puede ubicar material.",
+                              severity: "warning",
+                            });
+                          }
+                        }}
+                      >
+                        Ubicar
+                      </Button>
                     </Box>
                   </Grid>
-                );
-              })}
-          </Grid>
-        </AccordionDetails>
-      </Accordion>
+                ))}
+            </Grid>
+          </AccordionDetails>
+        </Accordion>
+      )} */}
 
       {/* Document dialog */}
       <Dialog open={docDialogOpen} onClose={() => setDocDialogOpen(false)}>
@@ -1073,7 +1472,7 @@ const PedidoViewer = (open, entry) => {
 
                 const res = await api.post(
                   `/material-entry/${currentEntryId}/advance/`,
-                  payload
+                  payload,
                 );
 
                 setFeedback({
@@ -1118,7 +1517,7 @@ const PedidoViewer = (open, entry) => {
                 <Checkbox
                   checked={isPnOk}
                   onChange={(e) => setIsPnOk(e.target.checked)}
-                  disabled={!isWarehouseUser}
+                  //disabled={!isWarehouseUser}
                 />
               }
               label="PN correcto"
@@ -1128,7 +1527,7 @@ const PedidoViewer = (open, entry) => {
                 <Checkbox
                   checked={isPnSuppOk}
                   onChange={(e) => setIsPnSuppOk(e.target.checked)}
-                  disabled={!isWarehouseUser}
+                  //disabled={!isWarehouseUser}
                 />
               }
               label="PN Proveedor correcto"
@@ -1138,19 +1537,11 @@ const PedidoViewer = (open, entry) => {
                 <Checkbox
                   checked={isQtyOk}
                   onChange={(e) => setIsQtyOk(e.target.checked)}
-                  disabled={!isWarehouseUser}
+                  //disabled={!isWarehouseUser}
                 />
               }
               label="Cantidad correcta"
             />
-            {/* <TextField
-              label="Date Code"
-              value={dateCode}
-              onChange={(e) => setDateCode(e.target.value)}
-              fullWidth
-              margin="dense"
-              disabled={!isWarehouseUser}
-            /> */}
             <Box display="flex" alignItems="center" gap={2} mt={1}>
               <TextField
                 label="Date Code"
@@ -1158,14 +1549,14 @@ const PedidoViewer = (open, entry) => {
                 onChange={(e) => setDateCode(e.target.value)}
                 fullWidth
                 margin="dense"
-                disabled={!isWarehouseUser}
+                //disabled={!isWarehouseUser}
               />
               <FormControl sx={{ minWidth: 100 }}>
                 <InputLabel>Vida útil</InputLabel>
                 <Select
                   value={shelfLife}
                   onChange={(e) => setShelfLife(e.target.value)}
-                  disabled={!isWarehouseUser}
+                  //disabled={!isWarehouseUser}
                 >
                   <MenuItem value={2}>2 años</MenuItem>
                   <MenuItem value={5}>5 años</MenuItem>
@@ -1178,7 +1569,7 @@ const PedidoViewer = (open, entry) => {
               <Button
                 variant="outlined"
                 onClick={handleCalculate}
-                disabled={!isWarehouseUser || !dateCode || !shelfLife}
+                // disabled={!isWarehouseUser || !dateCode || !shelfLife}
               >
                 Calcular vencimiento
               </Button>
@@ -1200,7 +1591,7 @@ const PedidoViewer = (open, entry) => {
                 <Checkbox
                   checked={isLabelAttached}
                   onChange={(e) => setIsLabelAttached(e.target.checked)}
-                  disabled={!isWarehouseUser}
+                  //disabled={!isWarehouseUser}
                 />
               }
               label="Etiqueta adherida"
@@ -1211,7 +1602,7 @@ const PedidoViewer = (open, entry) => {
           <Button onClick={() => setMaterialDialogOpen(false)}>Cancelar</Button>
           <Button
             variant="contained"
-            disabled={!isWarehouseUser}
+            //disabled={!isWarehouseUser}
             onClick={async () => {
               setLoading(true);
               try {
@@ -1225,7 +1616,7 @@ const PedidoViewer = (open, entry) => {
                     date_code: dateCode,
                     is_label_attached: isLabelAttached,
                     is_expired: isExpired,
-                  }
+                  },
                 );
 
                 const allTrue =
@@ -1238,7 +1629,7 @@ const PedidoViewer = (open, entry) => {
                 setFeedback({
                   open: true,
                   message: allTrue
-                    ? "Validación de material completada. Pendiente validación de calidad."
+                    ? "Validación de material completada."
                     : "❌ Material rechazado",
                   severity: allTrue ? "success" : "error",
                 });
@@ -1332,7 +1723,7 @@ const PedidoViewer = (open, entry) => {
                     special_characteristics: specialCharacteristics,
                     quality_certified: qualityCertified,
                     validated_labels: validatedLabels,
-                  }
+                  },
                 );
                 setFeedback({
                   open: true,
@@ -1472,7 +1863,7 @@ const PedidoViewer = (open, entry) => {
               <TextField
                 label="Fecha de ingreso"
                 value={new Date(selectedEntry.created_at).toLocaleString(
-                  "es-MX"
+                  "es-MX",
                 )}
                 disabled
                 fullWidth
@@ -1488,7 +1879,7 @@ const PedidoViewer = (open, entry) => {
         </DialogActions>
       </Dialog>
 
-      {/* Dialogo para mandar correo */}
+      {/* Dialog para mandar correo */}
       <Dialog
         fullScreen
         open={mailDialogOpen}
@@ -1561,6 +1952,7 @@ const PedidoViewer = (open, entry) => {
         </Box>
       </Dialog>
 
+      {/* Dialog material rechazado */}
       <Dialog
         open={rejectedDialogOpen}
         onClose={() => setRejectedDialogOpen(false)}
@@ -1596,13 +1988,143 @@ const PedidoViewer = (open, entry) => {
         <DialogActions>
           <Button onClick={() => setRejectedDialogOpen(false)}>Cerrar</Button>
           <Button
-            onClick={() => handleRejectedSubmit(currentEntryId)} // <-- ahora sí le pasamos el id
+            onClick={() => handleRejectedSubmit(currentEntryId)}
             disabled={!rejectedOption}
           >
             Enviar opción
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Seleccionar ubicación del material</DialogTitle>
+
+        <DialogContent dividers>
+          <Typography sx={{ mb: 1 }}>
+            Selecciona la explanada destino:
+          </Typography>
+
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel id="esplanade-label">Explanada</InputLabel>
+            <Select
+              labelId="esplanade-label"
+              label="Explanada"
+              value={selectedEsplanade}
+              onChange={(e) => setSelectedEsplanade(e.target.value)}
+            >
+              <MenuItem value="INCOMING">Explanada Incoming</MenuItem>
+              <MenuItem value="GENESIS">Explanada Genesis</MenuItem>
+            </Select>
+          </FormControl>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>Cancelar</Button>
+
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={!selectedEsplanade}
+            onClick={confirmDeliver}
+          >
+            Confirmar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog para asignar ubicacion */}
+      {/* <Dialog
+        open={locateDialogOpen}
+        onClose={() => setLocateDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            p: 1,
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            fontWeight: "bold",
+            fontSize: "1.2rem",
+            pb: 1,
+          }}
+        >
+          Asignar Ubicación de{" "}
+          <strong style={{ color: "#1976d2" }}>
+            {selectedLocEntry?.folio} – P/N: {selectedLocEntry?.cod_art}
+          </strong>
+        </DialogTitle>
+
+        <DialogContent sx={{ mt: 1 }}>
+          <Stack spacing={3}>
+            <FormControl fullWidth>
+              <InputLabel>Área</InputLabel>
+              <Select
+                value={selectedArea}
+                label="Área"
+                onChange={handleAreaChange}
+              >
+                <MenuItem value="SMT">SMT</MenuItem>
+                <MenuItem value="BACKEND">BACKEND</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Autocomplete
+              disablePortal
+              options={locationsList}
+              onChange={(e, newValue) =>
+                setLocationInput(newValue?.label || "")
+              }
+              renderInput={(params) => (
+                <TextField {...params} label="Ubicación" fullWidth />
+              )}
+            />
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setLocateDialogOpen(false)}>Cancelar</Button>
+
+          <Button
+            variant="contained"
+            sx={{ px: 4, py: 1 }}
+            disabled={!selectedArea || !locationInput}
+            onClick={async () => {
+              try {
+                await api.post(`/entries/${selectedLocEntry.id}/locate/`, {
+                  area: selectedArea,
+                  location: locationInput,
+                });
+
+                setFeedback({
+                  open: true,
+                  message: "Material ubicado correctamente",
+                  severity: "success",
+                });
+
+                setLocateDialogOpen(false);
+                fetchEntries();
+              } catch (err) {
+                setFeedback({
+                  open: true,
+                  message: "Error al ubicar",
+                  severity: "error",
+                });
+              }
+            }}
+          >
+            Guardar
+          </Button>
+        </DialogActions>
+      </Dialog> */}
 
       {/* Snackbar para alertas */}
       <Snackbar
